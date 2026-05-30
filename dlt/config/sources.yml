@@ -1,0 +1,43 @@
+# Source definitions for dlt pipelines
+# Non-sensitive config only — credentials live in .dlt/secrets.toml
+
+postgres:
+  pipeline_name: postgres_cdc
+  dataset_name: postgres
+  tables:
+    - name: orders
+      primary_key: id
+      incremental_cursor: updated_at
+      write_disposition: merge
+    - name: customers
+      primary_key: id
+      incremental_cursor: updated_at
+      write_disposition: merge
+    - name: products
+      primary_key: id
+      incremental_cursor: updated_at
+      write_disposition: merge
+
+api:
+  pipeline_name: api_ingestion
+  dataset_name: api
+  sources:
+    github:
+      repo: "thanhphat2609/data-platform-ingestion"
+      streams: ["events"]
+      incremental_cursor: created_at
+    openmeteo:
+      latitude: 10.8231    # Ho Chi Minh City
+      longitude: 106.6297
+      variables:
+        - temperature_2m
+        - relative_humidity_2m
+        - wind_speed_10m
+        - precipitation
+      timezone: "Asia/Ho_Chi_Minh"
+      lookback_days: 30
+    exchangerates:
+      base_currency: "USD"
+      targets: ["EUR", "GBP", "JPY", "SGD", "VND", "KRW", "AUD"]
+      lookback_days: 30
+      fallback_endpoint: "https://api.frankfurter.app"

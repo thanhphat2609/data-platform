@@ -1,0 +1,33 @@
+name: sdp-mysql-ecommerce-pipeline
+
+# spark-pipelines discovers Python modules via these glob patterns.
+# Paths are relative to the directory containing this YAML file.
+libraries:
+  - glob:
+      include: bronze_ingestion.py
+
+# Pipeline metadata + Delta checkpoint location (NOT the table data)
+storage: "s3a://bronze/spark_sdp/mysql/sales"
+
+# Catalog database — materialized views are registered here
+database: default
+
+configuration:
+  spark.sql.shuffle.partitions: "4"
+
+  # Delta Lake
+  spark.sql.extensions:            "io.delta.sql.DeltaSparkSessionExtension"
+  spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+  spark.sql.warehouse.dir:         "s3a://bronze/spark_sdp/warehouse"
+
+  # MinIO — overridable at runtime via --conf
+  spark.hadoop.fs.s3a.endpoint:               "http://infra-minio:9000"
+  spark.hadoop.fs.s3a.access.key:             "minioadmin"
+  spark.hadoop.fs.s3a.secret.key:             "minioadmin123"
+  spark.hadoop.fs.s3a.path.style.access:      "true"
+  spark.hadoop.fs.s3a.impl:                   "org.apache.hadoop.fs.s3a.S3AFileSystem"
+  spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+  spark.hadoop.fs.s3a.endpoint.region:        "us-east-1"
+
+  # DataFlint observability — remove if plugin JAR is missing
+  spark.plugins: "io.dataflint.spark.SparkDataflintPlugin"

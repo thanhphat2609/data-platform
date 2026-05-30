@@ -1,0 +1,11 @@
+[runtime]
+log_level = "WARNING"
+dlthub_telemetry = false
+
+# Filesystem destination → MinIO (S3-compatible)
+[destination.filesystem]
+bucket_url = "s3://bronze/dlt"
+
+[destination.filesystem.credentials]
+# Overridden by secrets.toml or environment variables
+region_name = "us-east-1"

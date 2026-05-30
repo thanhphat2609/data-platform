@@ -1,0 +1,19 @@
+{
+  "_comment": "Shared MinIO S3-compatible destination for all Airbyte connections",
+  "_note": "Configure via Airbyte UI at http://<server-ip>:8000 or Airbyte API at :8001",
+
+  "name": "minio-bronze",
+  "destinationDefinitionId": "4816b78f-1489-44c1-9060-4b19d5fa9362",
+
+  "connectionConfiguration": {
+    "s3_bucket_name": "bronze",
+    "s3_bucket_region": "us-east-1",
+    "s3_endpoint": "http://<server-ip>:9000",
+    "access_key_id": "<MINIO_ROOT_USER>",
+    "secret_access_key": "<MINIO_ROOT_PASSWORD>",
+    "format": {
+      "format_type": "Parquet",
+      "compression_codec": "SNAPPY"
+    }
+  }
+}

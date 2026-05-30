@@ -1,0 +1,39 @@
+# Environment
+.env
+.env.local
+
+# dlt secrets
+dlt/.dlt/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# dlt pipeline state (local runs)
+dlt/.dlt/pipelines/
+
+# Spark
+spark_sdp/__pycache__/
+*.class
+*.jar
+metastore_db/
+derby.log
+spark-warehouse/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
