@@ -4,12 +4,18 @@ Each function produces a materialized_view registered in the pipeline catalog.
 
 spark-pipelines discovers this file via the pipeline.yml glob:
   libraries:
-    - glob: { include: bronze/** }
+    - glob: { include: bronze_ingestion.py }
 """
 import os
+import sys
+
+# Make the schema package importable when spark-pipelines executes this file directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pyspark import pipelines as dp
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from schema.manage import *
 
 _JDBC_URL = (
     "jdbc:postgresql://{host}:{port}/{db}"
@@ -26,33 +32,96 @@ _JDBC_OPTIONS = {
     "fetchsize": "10000",
 }
 
+_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/ingestion/manage"
 
-def _read_table(table: str):
+_PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in PostgreSQL source
+
+
+def _read_table(source_table: str, query: str | None = None):
+    """Read a PostgreSQL table via JDBC.
+
+    Pass `query` to run a custom SQL instead of a full table scan — useful for
+    incremental loads.  The query is wrapped as a subquery so JDBC treats it as
+    a table: ``(SELECT ...) AS t``.
+    """
     spark = SparkSession.getActiveSession()
+    dbtable = f"({query}) AS t" if query else source_table
     return (
         spark.read.format("jdbc")
         .option("url", _JDBC_URL)
-        .option("dbtable", table)
+        .option("dbtable", dbtable)
         .options(**_JDBC_OPTIONS)
         .load()
+        # ingestion_date does not exist in PostgreSQL — derived here so Delta can partition by it
+        .withColumn("ingestion_date", F.current_date())
     )
 
 
-@dp.materialized_view(name="bronze_users")
+@dp.materialized_view(
+    name="bronze_users",
+    comment="Raw users from PostgreSQL manage DB — rolling 30-day window on created_at",
+    path=f"{_INGESTION_PATH}/bronze_users",
+    partition_cols=_PARTITION_COLS,
+    schema=_users_schema,
+)
 def bronze_users():
-    return _read_table("users")
+    return _read_table(
+        "users",
+        query="SELECT * FROM users",
+    )
 
 
-@dp.materialized_view(name="bronze_projects")
+@dp.materialized_view(
+    name="bronze_projects",
+    comment="Raw projects from PostgreSQL manage DB — rolling 30-day window on created_at",
+    path=f"{_INGESTION_PATH}/bronze_projects",
+    partition_cols=_PARTITION_COLS,
+    schema=_projects_schema,
+)
 def bronze_projects():
-    return _read_table("projects")
+    return _read_table(
+        "projects",
+        query="SELECT * FROM projects",
+    )
 
 
-@dp.materialized_view(name="bronze_tasks")
+@dp.materialized_view(
+    name="bronze_tasks",
+    comment="Raw tasks from PostgreSQL manage DB — rolling 30-day window on created_at",
+    path=f"{_INGESTION_PATH}/bronze_tasks",
+    partition_cols=_PARTITION_COLS,
+    schema=_tasks_schema,
+)
 def bronze_tasks():
-    return _read_table("tasks")
+    return _read_table(
+        "tasks",
+        query="SELECT * FROM tasks",
+    )
 
 
-@dp.materialized_view(name="bronze_issues")
+@dp.materialized_view(
+    name="bronze_issues",
+    comment="Raw issues from PostgreSQL manage DB — rolling 30-day window on created_at",
+    path=f"{_INGESTION_PATH}/bronze_issues",
+    partition_cols=_PARTITION_COLS,
+    schema=_issues_schema,
+)
 def bronze_issues():
-    return _read_table("issues")
+    return _read_table(
+        "issues",
+        query="SELECT * FROM issues",
+    )
+
+
+@dp.materialized_view(
+    name="bronze_comments",
+    comment="Raw comments from PostgreSQL manage DB — rolling 30-day window on created_at",
+    path=f"{_INGESTION_PATH}/bronze_comments",
+    partition_cols=_PARTITION_COLS,
+    schema=_comments_schema,
+)
+def bronze_comments():
+    return _read_table(
+        "comments",
+        query="SELECT * FROM comments",
+    )

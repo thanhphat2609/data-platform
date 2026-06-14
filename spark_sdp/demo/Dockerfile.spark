@@ -1,0 +1,27 @@
+FROM apache/spark:4.1.0-python3
+
+USER root
+
+RUN pip install "pyspark[pipelines]>=4.1.0"
+
+# Combine all JAR downloads into a single layer to optimize image size
+RUN curl -fL -o /opt/spark/jars/delta-spark_2.13-4.0.0.jar \
+        https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.0/delta-spark_2.13-4.0.0.jar && \
+    curl -fL -o /opt/spark/jars/delta-storage-4.0.0.jar \
+        https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.0/delta-storage-4.0.0.jar && \
+    # Azure Blob Storage (replaces hadoop-aws / aws-sdk-bundle used in MinIO setup)
+    curl -fL -o /opt/spark/jars/hadoop-azure-3.4.1.jar \
+        https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.4.1/hadoop-azure-3.4.1.jar && \
+    curl -fL -o /opt/spark/jars/azure-storage-8.6.6.jar \
+        https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar && \
+    # PostgreSQL JDBC Driver
+    curl -fL -o /opt/spark/jars/postgresql-42.7.3.jar \
+        https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar && \
+    # MySQL JDBC Driver
+    curl -fL -o /opt/spark/jars/mysql-connector-j-8.4.0.jar \
+        https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
+
+USER spark
+
+# Keep the container alive — trigger pipelines via: docker exec spark_sdp_demo spark-pipelines run ...
+CMD ["tail", "-f", "/dev/null"]

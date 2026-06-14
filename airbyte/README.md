@@ -45,13 +45,13 @@ All connections write **Parquet + SNAPPY** to MinIO via the shared `minio-bronze
 
 ## Deploy
 
-1. Start the Airbyte server from **data-platform-infra**:
+1. Start the Airbyte stack from **data-platform-infra**:
    ```bash
-   cd data-platform-infra
-   make airbyte-server
+   cd data-platform-infra/airbyte
+   cp .env.example .env && docker compose up -d
    ```
 
-2. Open Airbyte UI at `http://<server-ip>:8000`
+2. Open Airbyte UI at `http://localhost:8000`
 
 3. Create the MinIO destination using `destination/minio_s3.json` as reference
 

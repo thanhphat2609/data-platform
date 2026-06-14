@@ -1,0 +1,135 @@
+services:
+
+  # ─────────────────────────────────────────
+  # Source: PostgreSQL — project management
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: sdp_postgres
+    environment:
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB:       manage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./seed/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d manage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sdp_network
+
+  # ─────────────────────────────────────────
+  # Source: MySQL — ecommerce
+  # ─────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    container_name: sdp_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE:      ecommerce
+      MYSQL_USER:          admin
+      MYSQL_PASSWORD:      admin123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uadmin", "-padmin123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sdp_network
+
+  # ─────────────────────────────────────────
+  # Destination: Azure Blob Storage (Azurite)
+  #
+  # Runs on port 80 inside sdp_network so that
+  # hadoop-azure resolves devstoreaccount1.blob.core.windows.net → this container.
+  # Exposed as localhost:10000 on the host for Azure Storage Explorer.
+  # ─────────────────────────────────────────
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: sdp_azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 80
+    ports:
+      - "10000:80"
+    volumes:
+      - azurite_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      sdp_network:
+        aliases:
+          - devstoreaccount1.blob.core.windows.net   # hadoop-azure connects here on port 80
+
+  # ─────────────────────────────────────────
+  # Azurite bootstrap: create 'bronze' container
+  # ─────────────────────────────────────────
+  azurite-init:
+    image: mcr.microsoft.com/azure-cli:latest
+    container_name: sdp_azurite_init
+    depends_on:
+      azurite:
+        condition: service_healthy
+    command: >
+      az storage container create
+        --name bronze
+        --connection-string
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://azurite/devstoreaccount1;"
+    restart: "no"
+    networks:
+      - sdp_network
+
+  # ─────────────────────────────────────────
+  # Spark 4.1 with SDP (spark-pipelines CLI)
+  # ─────────────────────────────────────────
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark_sdp_demo
+    environment:
+      # MySQL
+      MYSQL_HOST:     mysql
+      MYSQL_PORT:     "3306"
+      MYSQL_DB:       ecommerce
+      MYSQL_USER:     admin
+      MYSQL_PASSWORD: admin123
+      # PostgreSQL
+      POSTGRES_HOST:       postgres
+      POSTGRES_PORT:       "5432"
+      POSTGRES_MANAGE_DB:  manage
+      POSTGRES_USER:       admin
+      POSTGRES_PASSWORD:   admin123
+    ports:
+      - "4040:4040"   # Spark UI
+    volumes:
+      - ../pipelines:/opt/spark/pipeline
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      azurite-init:
+        condition: service_completed_successfully
+    networks:
+      - sdp_network
+
+volumes:
+  postgres_data:
+  mysql_data:
+  azurite_data:
+
+networks:
+  sdp_network:
+    driver: bridge
