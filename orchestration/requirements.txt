@@ -1,0 +1,23 @@
+# ── Core ───────────────────────────────────────────────────────────────────────
+dagster
+dagster-webserver
+
+# ── Multi-VM cloud setup ───────────────────────────────────────────────────────
+dagster-postgres          # Shared metadata DB across all VMs
+dagster-celery[redis]     # Celery worker routing via Redis
+celery[redis]             # Celery client with Redis broker
+dagster-azure             # Azure Blob Storage for compute logs
+psycopg2-binary           # PostgreSQL Python driver
+
+# ── Asset I/O (Azure Blob Parquet IO Manager) ─────────────────────────────────
+azure-storage-blob        # Azure SDK for blob read/write in IO manager
+pandas                    # DataFrame serialisation
+pyarrow                   # Parquet engine used by pandas
+
+# ── Alternative compute log storage ───────────────────────────────────────────
+# dagster-aws               # S3
+# dagster-gcp               # Google Cloud Storage
+
+# ── Alternative worker backends ───────────────────────────────────────────────
+# dagster-k8s               # Kubernetes pods
+# dagster-docker            # Docker containers

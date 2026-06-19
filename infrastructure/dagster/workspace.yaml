@@ -1,0 +1,4 @@
+load_from:
+  - python_file:
+      working_directory: /opt/dagster/app/orchestration
+      relative_path: definitions.py

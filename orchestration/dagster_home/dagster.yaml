@@ -1,0 +1,20 @@
+# Worker VM Dagster instance config — passed with -y flag on worker startup.
+# This file controls Dagster storage and compute log settings only.
+#
+# NOTE: Celery broker URL is NOT read from this file.
+#       Set CELERY_BROKER_URL and CELERY_RESULT_BACKEND env vars in start_worker*.sh instead.
+
+# Workers write run status back to the shared PostgreSQL on the Master VM
+storage:
+  postgres:
+    postgres_url: "postgresql://dagster:changeme@<Master_IP_VM>:5432/dagster_db"
+
+# Workers stream op logs to Azure Blob so the UI can display them
+compute_logs:
+  module: dagster_azure.blob.compute_log_manager
+  class: AzureBlobComputeLogManager
+  config:
+    storage_account: "YOUR_STORAGE_ACCOUNT"
+    container: "dagster-logs"
+    prefix: "compute-logs"
+    access_key_or_sas_token: "YOUR_KEY"

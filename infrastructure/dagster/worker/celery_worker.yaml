@@ -1,0 +1,2 @@
+broker: "redis://10.0.x.x:6379/0" 
+backend: "redis://10.0.x.x:6379/0" 

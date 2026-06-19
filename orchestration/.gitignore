@@ -1,0 +1,5 @@
+venv/
+.dagster_home/
+__pycache__/
+*.pyc
+.tmp_*

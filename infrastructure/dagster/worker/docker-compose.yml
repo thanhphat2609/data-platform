@@ -1,0 +1,21 @@
+services:
+
+  dagster-worker-1:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    command: dagster-celery worker start -A dagster_celery.app -q worker-1
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@${MASTER_VM_IP}:5432/dagster_db
+      CELERY_BROKER_URL: redis://${MASTER_VM_IP}:6379/0
+      CELERY_RESULT_BACKEND: redis://${MASTER_VM_IP}:6379/0
+
+  dagster-worker-2:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    command: dagster-celery worker start -A dagster_celery.app -q worker-2
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@${MASTER_VM_IP}:5432/dagster_db
+      CELERY_BROKER_URL: redis://${MASTER_VM_IP}:6379/0
+      CELERY_RESULT_BACKEND: redis://${MASTER_VM_IP}:6379/0

@@ -1,9 +1,9 @@
-# airbyte — Connector-based EL (connection templates)
+# Airbyte — Connector-based EL (connection templates)
 
 Airbyte Community Edition connection templates for GitHub Events, Open-Meteo weather, and Exchange Rates → MinIO bronze.
 
-The Airbyte server + worker infrastructure lives in [data-platform-infra](https://github.com/thanhphat2609/data-platform-infra) (`airbyte/server/` and `airbyte/worker/`).  
-Connection configurations will be applied via the Airbyte UI or API in a later phase.
+The Airbyte server + worker infrastructure is managed separately (self-hosted Airbyte CE).  
+The JSON files here serve as config references to recreate connections via the Airbyte UI or API.
 
 ---
 
@@ -45,11 +45,7 @@ All connections write **Parquet + SNAPPY** to MinIO via the shared `minio-bronze
 
 ## Deploy
 
-1. Start the Airbyte stack from **data-platform-infra**:
-   ```bash
-   cd data-platform-infra/airbyte
-   cp .env.example .env && docker compose up -d
-   ```
+1. Start your Airbyte CE stack (self-hosted)
 
 2. Open Airbyte UI at `http://localhost:8000`
 
@@ -61,16 +57,18 @@ All connections write **Parquet + SNAPPY** to MinIO via the shared `minio-bronze
 
 ---
 
-## Orchestration (coming in data-platform-orchestration)
+## Orchestration
+
+Airbyte syncs are triggered by Dagster using the `dagster-airbyte` integration:
 
 ```python
-# Airflow DAG will trigger via:
-from airflow.providers.airbyte.operators.airbyte import AirbyteTriggerSyncOperator
+from dagster_airbyte import AirbyteSyncCompletionState, build_airbyte_assets
 
-sync_github = AirbyteTriggerSyncOperator(
-    task_id="airbyte_github_events",
-    airbyte_conn_id="airbyte_server",
+airbyte_assets = build_airbyte_assets(
     connection_id="<github-events-connection-id>",
-    asynchronous=False,
+    destination_tables=["github_events"],
 )
 ```
+
+Trigger and monitor status is tracked in the Dagster UI alongside all other assets.  
+See [orchestration/README.md](../../orchestration/README.md) for the full orchestration setup.

@@ -1,0 +1,62 @@
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dagster_db
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:-dagster}
+    ports:
+      - "5432:5432"
+    volumes:
+      - dagster_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dagster-webserver:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    command: dagster-webserver -h 0.0.0.0 -p 3000
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  dagster-daemon:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    command: dagster-daemon run
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  dagster_postgres_data:

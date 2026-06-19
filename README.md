@@ -1,15 +1,12 @@
-# data-platform-ingestion
+# data-platform
 
-EL ingestion layer — dlt (PostgreSQL CDC + REST), Spark SDP (MySQL + PostgreSQL batch), Airbyte CE (GitHub / Open-Meteo / FX) → MinIO bronze.
+Mono-repo for the full data engineering stack — ingestion, orchestration, and infrastructure in one place.
 
-Part of the data-platform series. Infrastructure (databases, object storage, Spark image) lives in [data-platform-infra](https://github.com/thanhphat2609/data-platform-infra).
-
-[![data-engineering](https://img.shields.io/badge/data--engineering-blue)]()
 [![apache-spark](https://img.shields.io/badge/apache--spark-4.1-orange)]()
+[![dagster](https://img.shields.io/badge/dagster-latest-blue)]()
 [![airbyte](https://img.shields.io/badge/airbyte-CE-purple)]()
 [![dlt](https://img.shields.io/badge/dlt-0.5-green)]()
 [![delta-lake](https://img.shields.io/badge/delta--lake-4.0-teal)]()
-[![minio](https://img.shields.io/badge/minio-bronze-red)]()
 [![medallion](https://img.shields.io/badge/medallion--architecture-grey)]()
 
 ---
@@ -17,102 +14,107 @@ Part of the data-platform series. Infrastructure (databases, object storage, Spa
 ## Architecture
 
 ```
-PostgreSQL (CDC)    MySQL (JDBC)    PostgreSQL (JDBC)   GitHub / Open-Meteo / FX
-      │                  │                 │                       │
-      ▼                  ▼                 ▼                       ▼
-   [ dlt ]         [ Spark SDP ]    [ Spark SDP ]          [ Airbyte CE ]
- Incremental       mysql/ecommerce  postgresql/manage      Connector-based
- CDC + REST        batch reads       batch reads            No-code EL
-      │                  │                 │                       │
-      └──────────────────┴─────────────────┴───────────────────────┘
-                                     │
-                        ┌────────────▼────────────┐
-                        │   MinIO  (bronze/)       │
-                        │  Parquet / Delta Lake    │
-                        └──────────────────────────┘
+PostgreSQL (CDC)   MySQL (JDBC)   PostgreSQL (JDBC)   GitHub / Open-Meteo / FX
+      │                 │                │                       │
+      ▼                 ▼                ▼                       ▼
+   [ dlt ]        [ Spark SDP ]   [ Spark SDP ]          [ Airbyte CE ]
+ Incremental      mysql/ecommerce  postgresql/manage     Connector-based
+ CDC + REST        batch reads      batch reads           No-code EL
+      │                 │                │                       │
+      └─────────────────┴────────────────┴───────────────────────┘
+                                   │
+                      ┌────────────▼────────────┐
+                      │    MinIO  (bronze/)      │
+                      │   Parquet / Delta Lake   │
+                      └────────────┬────────────┘
+                                   │
+                      ┌────────────▼────────────┐
+                      │       Dagster            │
+                      │  schedules · sensors     │
+                      │  software-defined assets │
+                      └─────────────────────────┘
 ```
-
-See [docs/architecture.md](docs/architecture.md) for the full diagram.
 
 ---
 
 ## Repo structure
 
 ```
-data-platform-ingestion/
+data-platform/
 │
-├── dlt/                      ← Python-native incremental EL
-│   ├── pipelines/
-│   │   ├── postgres_pipeline.py    CDC: orders/customers/products
-│   │   └── api_pipeline.py         REST: GitHub/OpenMeteo/FX rates
-│   ├── config/sources.yml
-│   ├── .dlt/config.toml            Filesystem → MinIO
-│   └── requirements.txt
+├── ingestion/                    ← EL pipelines
+│   ├── dlt/                      Python-native CDC + REST
+│   ├── sdp/                      Spark Declarative Pipelines (batch)
+│   ├── airbyte/                  Connection templates (no-code EL)
+│   └── docs/                     Architecture, bronze convention, tool guide
 │
-├── sdp/                      ← PySpark 4.1 Declarative Pipelines
-│   ├── pipelines/
-│   │   ├── schema/           ← StructType schema definitions
-│   │   ├── ecommerce/        ← JDBC: MySQL sales DB (customers, orders)
-│   │   │   ├── pipeline.yml
-│   │   │   └── bronze_ingestion.py
-│   │   └── manage/           ← JDBC: PostgreSQL manage DB (users, projects, tasks, issues)
-│   │       ├── pipeline.yml
-│   │       └── bronze_ingestion.py
-│   └── demo/                 ← Local Docker stack (Spark + MySQL + PostgreSQL + Azurite)
+├── orchestration/                ← Dagster software-defined assets
+│   ├── assets/                   Asset definitions (sales, sap)
+│   ├── jobs/                     Job wrappers
+│   ├── schedules/                Cron schedules
+│   ├── resources/                IO managers
+│   └── src/                      Business logic
 │
-├── airbyte/                  ← Connection templates (infra in data-platform-infra)
-│   ├── connections/
-│   │   ├── github_events.json
-│   │   ├── openmeteo_hourly.json
-│   │   └── exchangerates_daily.json
-│   └── destination/
-│       └── minio_s3.json
-│
-├── docs/
-│   ├── architecture.md
-│   ├── when-to-use.md
-│   └── bronze-convention.md
-│
-├── .env.example
-└── README.md
+└── infrastructure/               ← Deployment
+    ├── dagster/                  Docker Compose — webserver, daemon, workers
+    │   ├── control/              Master VM (postgres + redis + UI + daemon)
+    │   └── worker/               Worker VMs (Celery workers)
+    └── spark/                    Custom Spark 4.1 image (Delta + JDBC + Azure Blob)
 ```
 
 ---
 
 ## Quick start
 
+### 1. Configure environment
+
 ```bash
-# 1. Start infrastructure (data-platform-infra repo)
-cd data-platform-infra
-make up          # PostgreSQL :5432 | MySQL :3306 | MinIO :9000/:9001
-make build-spark # Build Spark 4.1 image (one-time)
-
-# 2. Configure ingestion
-cd data-platform-ingestion
 cp .env.example .env
-# Edit .env — set GITHUB_TOKEN
+# Edit .env — set GITHUB_TOKEN, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, DAGSTER_POSTGRES_PASSWORD
+```
 
-# 3. dlt — PostgreSQL CDC + REST APIs
-cd dlt
+### 2. Ingestion — dlt
+
+```bash
+cd ingestion/dlt
 pip install -r requirements.txt
 python pipelines/postgres_pipeline.py
 python pipelines/api_pipeline.py
-
-# 4. Spark SDP — batch ingestion (local demo stack)
-cd sdp/demo && docker compose up --build -d
-docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
-docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
-
-# 5. Airbyte — configure connections via Airbyte UI (templates in airbyte/)
-#   Triggers via AirbyteTriggerSyncOperator in data-platform-orchestration
 ```
+
+### 3. Ingestion — Spark SDP
+
+```bash
+cd infrastructure/spark
+docker compose up --build -d
+
+docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
+```
+
+### 4. Ingestion — Airbyte
+
+Configure connections via Airbyte UI using the templates in `ingestion/airbyte/connections/`.  
+Airbyte server is managed separately (see `ingestion/airbyte/README.md`).
+
+### 5. Orchestration — Dagster
+
+```bash
+# Master VM
+docker compose -f infrastructure/dagster/control/docker-compose.yml up -d
+
+# Worker VMs (set MASTER_VM_IP in .env)
+docker compose -f infrastructure/dagster/worker/docker-compose.yml up -d
+```
+
+Open **http://MASTER_VM_IP:3000** for the Dagster UI.
 
 ---
 
 ## Bronze output paths
 
 | Layer | Path | Format |
-|---|---|---|
+|-------|------|--------|
 | dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
 | dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
 | Spark MySQL/ecommerce | `bronze/sdp/mysql/sales/bronze_<table>/` | Delta |
@@ -121,25 +123,10 @@ docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipel
 
 ---
 
-## Tool decision guide
+## Layer READMEs
 
-| Source | Scale | Tool |
-|---|---|---|
-| SaaS API (GitHub, Stripe…) | Any | **Airbyte** |
-| PostgreSQL CDC (real-time changes) | Medium | **dlt** |
-| Custom REST with pagination | Medium | **dlt** |
-| MySQL / PostgreSQL full-table dump | Large (1M+ rows) | **Spark SDP** |
-
-→ Full decision matrix: [docs/when-to-use.md](docs/when-to-use.md)
-
----
-
-## Part of data-platform series
-
-| Repo | Purpose |
-|---|---|
-| [data-platform-infra](https://github.com/thanhphat2609/data-platform-infra) | Shared infrastructure: databases, MinIO, Spark image, Airbyte |
-| **data-platform-ingestion** (this) | EL pipelines: dlt + Spark SDP + Airbyte templates |
-| data-platform-transformation | dbt: bronze → silver → gold |
-| data-platform-orchestration | Airflow: schedule + monitor |
-| data-platform-visualization | Metabase / Superset: dashboards |
+| Layer | README |
+|-------|--------|
+| Ingestion | [ingestion/README.md](ingestion/README.md) |
+| Orchestration | [orchestration/README.md](orchestration/README.md) |
+| Infrastructure | [infrastructure/README.md](infrastructure/README.md) |

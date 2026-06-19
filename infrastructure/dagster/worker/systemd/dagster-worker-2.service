@@ -1,0 +1,16 @@
+[Unit]
+Description=Dagster Celery Worker-2 (Sales Pipeline)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/azureuser/dagster-demo
+ExecStart=/home/azureuser/dagster-demo/venv/bin/dagster-celery worker start \
+  -A dagster_celery.app \
+  -Q worker-2 \
+  --config-yaml /home/azureuser/dagster-demo/worker/celery_worker.yaml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
