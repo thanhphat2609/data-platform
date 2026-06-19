@@ -1,6 +1,6 @@
 # Ingestion
 
-EL layer — three tools covering every source type and scale.
+EL layer — dlt for CDC and REST APIs, Spark SDP for large-scale JDBC batch.
 
 ## Tools at a glance
 
@@ -8,51 +8,110 @@ EL layer — three tools covering every source type and scale.
 |------|----------|---------------|
 | [dlt](dlt/README.md) | PostgreSQL CDC · custom REST APIs | Parquet |
 | [Spark SDP](sdp/README.md) | Large-scale JDBC batch (MySQL, PostgreSQL) | Delta Lake |
-| [Airbyte](airbyte/README.md) | SaaS APIs with existing connectors (zero code) | Parquet |
+
+---
 
 ## Architecture
 
 ```
-PostgreSQL (CDC)   MySQL (JDBC)   PostgreSQL (JDBC)   GitHub / Open-Meteo / FX
-      │                 │                │                       │
-      ▼                 ▼                ▼                       ▼
-   [ dlt ]        [ Spark SDP ]   [ Spark SDP ]          [ Airbyte CE ]
-      │                 │                │                       │
-      └─────────────────┴────────────────┴───────────────────────┘
-                                   │
-                      ┌────────────▼────────────┐
-                      │    MinIO  (bronze/)      │
-                      │   Parquet / Delta Lake   │
-                      └─────────────────────────┘
+PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
+      │                │              │                │
+      ▼                ▼              ▼                ▼
+   [ dlt ]          [ dlt ]     [ Spark SDP ]   [ Spark SDP ]
+      │                │              │                │
+      └────────────────┴──────────────┴────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    MinIO  (bronze/)      │
+                    │   Parquet / Delta Lake   │
+                    └─────────────────────────┘
 ```
 
-## Tool selection guide
+---
 
-| Source | Scale | Pick |
-|--------|-------|------|
-| SaaS API (GitHub, Stripe, Salesforce…) | Any | **Airbyte** |
-| PostgreSQL row-level CDC | Medium | **dlt** |
-| Custom REST with pagination / auth | Medium | **dlt** |
-| MySQL or PostgreSQL full-table dump | Large (1M+ rows) | **Spark SDP** |
+## Tool decision matrix
 
-→ Full decision matrix: [docs/when-to-use.md](docs/when-to-use.md)
+| Criteria | dlt | Spark SDP |
+|----------|-----|-----------|
+| **Source type** | Databases (CDC) + custom REST APIs | Relational DBs via JDBC |
+| **Code required** | Python (50–100 lines) | Python `@dp.materialized_view` + YAML spec |
+| **Scale** | Medium (streaming rows) | Large (millions of rows, parallel JDBC reads) |
+| **Schema handling** | Auto-inferred + evolvable | Explicit StructType in schema file |
+| **Incremental state** | `pipeline_state` per-resource cursor | spark-pipelines checkpoint |
+| **Output format** | Parquet | Delta Lake (ACID, time-travel) |
+| **When to choose** | CDC or custom pagination logic | Full table dumps, Delta Lake downstream |
 
-## Bronze output paths
+### Anti-patterns
 
-| Source | Path | Format |
-|--------|------|--------|
-| dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
-| dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
-| Spark MySQL/ecommerce | `bronze/sdp/mysql/sales/bronze_<table>/` | Delta |
-| Spark PostgreSQL/manage | `bronze/sdp/postgresql/manage/bronze_<table>/` | Delta |
-| Airbyte | `bronze/airbyte/<source>/<stream>/YYYY/MM/DD/` | Parquet |
+| Don't | Do instead |
+|-------|-----------|
+| dlt for a 100M-row MySQL full dump | Spark SDP |
+| Spark SDP for a small REST API response | dlt |
+| `python main.py` to run Spark SDP | `spark-pipelines run --spec pipeline.yml` |
 
-→ Naming rules and partition strategy: [docs/bronze-convention.md](docs/bronze-convention.md)
+### Source → tool → bronze mapping
 
-## Docs
+```
+Source               Tool        Bronze path
+────────────────────────────────────────────────────────
+PostgreSQL CDC       dlt         bronze/dlt/postgres/
+REST APIs            dlt         bronze/dlt/api/
+MySQL batch          Spark SDP   bronze/sdp/mysql/sales/
+PostgreSQL batch     Spark SDP   bronze/sdp/postgresql/manage/
+```
 
-| Doc | Purpose |
-|-----|---------|
-| [docs/architecture.md](docs/architecture.md) | Full architecture diagram and component breakdown |
-| [docs/when-to-use.md](docs/when-to-use.md) | Tool decision matrix with anti-patterns |
-| [docs/bronze-convention.md](docs/bronze-convention.md) | Folder structure and partition strategy for bronze layer |
+---
+
+## Bronze layer convention
+
+All raw data lands in `bronze/` with no transformations. Path structure encodes **tool → source → stream → partition**.
+
+```
+bronze/
+├── dlt/
+│   ├── postgres/
+│   │   ├── orders/_dlt_load_id=<uuid>/*.parquet
+│   │   ├── customers/_dlt_load_id=<uuid>/*.parquet
+│   │   └── products/_dlt_load_id=<uuid>/*.parquet
+│   └── api/
+│       ├── github_events/_dlt_load_id=<uuid>/
+│       └── openmeteo_hourly/_dlt_load_id=<uuid>/
+│
+└── sdp/
+    ├── mysql/sales/
+    │   ├── bronze_customers/_delta_log/ + part-*.parquet
+    │   └── bronze_orders/_delta_log/   + part-*.parquet
+    └── postgresql/manage/
+        ├── bronze_users/
+        ├── bronze_projects/
+        ├── bronze_tasks/
+        └── bronze_issues/
+```
+
+### Partition strategy
+
+| Tool | Partition key | Rationale |
+|------|--------------|-----------|
+| **dlt** | `_dlt_load_id=<uuid>` | Each load is atomic — query by load ID for a consistent snapshot |
+| **Spark SDP** | None (Delta-managed) | Full Delta table — use `VERSION AS OF` or `TIMESTAMP AS OF` for time-travel |
+
+### Naming rules
+
+1. Lowercase directory names throughout
+2. Underscores, not hyphens (`bronze_orders`, not `bronze-orders`)
+3. Tool prefix first (`dlt/`, `sdp/`) — provenance is visible in MinIO UI
+4. No credentials, PII, or secrets in paths
+
+### Reading bronze downstream
+
+```sql
+-- dlt (Parquet, Hive partitioning)
+SELECT * FROM hive.bronze."dlt/postgres/orders";
+
+-- Spark SDP (Delta Lake — current state)
+SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`;
+
+-- Spark SDP (Delta time-travel)
+SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`
+TIMESTAMP AS OF '2026-05-30 08:00:00';
+```

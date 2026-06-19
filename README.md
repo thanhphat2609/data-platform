@@ -4,7 +4,6 @@ Mono-repo for the full data engineering stack — ingestion, orchestration, and 
 
 [![apache-spark](https://img.shields.io/badge/apache--spark-4.1-orange)]()
 [![dagster](https://img.shields.io/badge/dagster-latest-blue)]()
-[![airbyte](https://img.shields.io/badge/airbyte-CE-purple)]()
 [![dlt](https://img.shields.io/badge/dlt-0.5-green)]()
 [![delta-lake](https://img.shields.io/badge/delta--lake-4.0-teal)]()
 [![medallion](https://img.shields.io/badge/medallion--architecture-grey)]()
@@ -14,25 +13,23 @@ Mono-repo for the full data engineering stack — ingestion, orchestration, and 
 ## Architecture
 
 ```
-PostgreSQL (CDC)   MySQL (JDBC)   PostgreSQL (JDBC)   GitHub / Open-Meteo / FX
-      │                 │                │                       │
-      ▼                 ▼                ▼                       ▼
-   [ dlt ]        [ Spark SDP ]   [ Spark SDP ]          [ Airbyte CE ]
- Incremental      mysql/ecommerce  postgresql/manage     Connector-based
- CDC + REST        batch reads      batch reads           No-code EL
-      │                 │                │                       │
-      └─────────────────┴────────────────┴───────────────────────┘
-                                   │
-                      ┌────────────▼────────────┐
-                      │    MinIO  (bronze/)      │
-                      │   Parquet / Delta Lake   │
-                      └────────────┬────────────┘
-                                   │
-                      ┌────────────▼────────────┐
-                      │       Dagster            │
-                      │  schedules · sensors     │
-                      │  software-defined assets │
-                      └─────────────────────────┘
+PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
+      │                │              │                │
+      ▼                ▼              ▼                ▼
+   [ dlt ]          [ dlt ]     [ Spark SDP ]   [ Spark SDP ]
+      │                │              │                │
+      └────────────────┴──────────────┴────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    MinIO  (bronze/)      │
+                    │   Parquet / Delta Lake   │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │       Dagster            │
+                    │  schedules · sensors     │
+                    │  software-defined assets │
+                    └─────────────────────────┘
 ```
 
 ---
@@ -44,9 +41,7 @@ data-platform/
 │
 ├── ingestion/                    ← EL pipelines
 │   ├── dlt/                      Python-native CDC + REST
-│   ├── sdp/                      Spark Declarative Pipelines (batch)
-│   ├── airbyte/                  Connection templates (no-code EL)
-│   └── docs/                     Architecture, bronze convention, tool guide
+│   └── sdp/                      Spark Declarative Pipelines (batch)
 │
 ├── orchestration/                ← Dagster software-defined assets
 │   ├── assets/                   Asset definitions (sales, sap)
@@ -70,7 +65,7 @@ data-platform/
 
 ```bash
 cp .env.example .env
-# Edit .env — set GITHUB_TOKEN, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, DAGSTER_POSTGRES_PASSWORD
+# Edit .env — set AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, DAGSTER_POSTGRES_PASSWORD
 ```
 
 ### 2. Ingestion — dlt
@@ -92,12 +87,7 @@ docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/
 docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
 ```
 
-### 4. Ingestion — Airbyte
-
-Configure connections via Airbyte UI using the templates in `ingestion/airbyte/connections/`.  
-Airbyte server is managed separately (see `ingestion/airbyte/README.md`).
-
-### 5. Orchestration — Dagster
+### 4. Orchestration — Dagster
 
 ```bash
 # Master VM
@@ -113,13 +103,12 @@ Open **http://MASTER_VM_IP:3000** for the Dagster UI.
 
 ## Bronze output paths
 
-| Layer | Path | Format |
-|-------|------|--------|
+| Source | Path | Format |
+|--------|------|--------|
 | dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
 | dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
 | Spark MySQL/ecommerce | `bronze/sdp/mysql/sales/bronze_<table>/` | Delta |
 | Spark PostgreSQL/manage | `bronze/sdp/postgresql/manage/bronze_<table>/` | Delta |
-| Airbyte | `bronze/airbyte/<source>/<stream>/YYYY/MM/DD/` | Parquet |
 
 ---
 
