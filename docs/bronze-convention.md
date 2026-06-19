@@ -43,9 +43,9 @@ bronze/
 │       └── exchange_rates/
 │           └── _dlt_load_id=abc128/
 │
-└── spark_sdp/                            ← Delta tables managed by spark-pipelines
+└── sdp/                            ← Delta tables managed by spark-pipelines
     ├── mysql/
-    │   └── sales/                        ←   storage: "s3a://bronze/spark_sdp/mysql/sales"
+    │   └── sales/                        ←   storage: "s3a://bronze/sdp/mysql/sales"
     │       ├── bronze_customers/         ←   @dp.materialized_view(name="bronze_customers")
     │       │   ├── _delta_log/
     │       │   └── part-*.parquet
@@ -53,7 +53,7 @@ bronze/
     │           ├── _delta_log/
     │           └── part-*.parquet
     └── postgresql/
-        └── manage/                       ←   storage: "s3a://bronze/spark_sdp/postgresql/manage"
+        └── manage/                       ←   storage: "s3a://bronze/sdp/postgresql/manage"
             ├── bronze_users/             ←   @dp.materialized_view(name="bronze_users")
             │   ├── _delta_log/
             │   └── part-*.parquet
@@ -70,7 +70,7 @@ bronze/
 |---|---|---|
 | **airbyte** | `YYYY/MM/DD/<epoch>/` (path, set by destination config) | Per-run snapshot; epoch prevents overwrites on same-day reruns |
 | **dlt** | `_dlt_load_id=<uuid>` (managed by dlt) | Each load is atomic; query by load ID to get exactly one consistent snapshot |
-| **spark_sdp** | None — spark-pipelines manages Delta state internally | Full table Delta; time-travel via `VERSION AS OF` or `TIMESTAMP AS OF` |
+| **sdp** | None — spark-pipelines manages Delta state internally | Full table Delta; time-travel via `VERSION AS OF` or `TIMESTAMP AS OF` |
 
 ---
 
@@ -80,7 +80,7 @@ bronze/
 2. **Underscores**, not hyphens, in logical names (`bronze_orders`, not `bronze-orders`)
 3. **Date format in paths**: `YYYY/MM/DD` (Airbyte convention) or `_dlt_load_id=` (dlt)
 4. **No credentials, PII, or runtime secrets** in paths or filenames
-5. **Tool prefix first** (`dlt/`, `spark_sdp/`, `airbyte/`) — makes provenance obvious in MinIO UI
+5. **Tool prefix first** (`dlt/`, `sdp/`, `airbyte/`) — makes provenance obvious in MinIO UI
 
 ---
 
@@ -99,17 +99,17 @@ SELECT * FROM hive.bronze."dlt/postgres/orders";
 ### Spark SDP tables (Delta Lake)
 ```sql
 -- MySQL ecommerce — current state
-SELECT * FROM delta.`s3a://bronze/spark_sdp/mysql/sales/bronze_orders`;
+SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`;
 
 -- PostgreSQL manage — current state
-SELECT * FROM delta.`s3a://bronze/spark_sdp/postgresql/manage/bronze_tasks`;
+SELECT * FROM delta.`s3a://bronze/sdp/postgresql/manage/bronze_tasks`;
 
 -- Point-in-time read (Delta time-travel)
-SELECT * FROM delta.`s3a://bronze/spark_sdp/mysql/sales/bronze_orders`
+SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`
 TIMESTAMP AS OF '2026-05-30 08:00:00';
 
 -- Check history
-DESCRIBE HISTORY delta.`s3a://bronze/spark_sdp/mysql/sales/bronze_customers`;
+DESCRIBE HISTORY delta.`s3a://bronze/sdp/mysql/sales/bronze_customers`;
 ```
 
 ### Airbyte files (plain Parquet)

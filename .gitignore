@@ -22,7 +22,7 @@ env/
 dlt/.dlt/pipelines/
 
 # Spark
-spark_sdp/__pycache__/
+sdp/__pycache__/
 *.class
 *.jar
 metastore_db/

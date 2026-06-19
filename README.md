@@ -49,15 +49,16 @@ data-platform-ingestion/
 │   ├── .dlt/config.toml            Filesystem → MinIO
 │   └── requirements.txt
 │
-├── spark_sdp/                ← PySpark 4.1 Declarative Pipelines
+├── sdp/                      ← PySpark 4.1 Declarative Pipelines
 │   ├── pipelines/
+│   │   ├── schema/           ← StructType schema definitions
 │   │   ├── ecommerce/        ← JDBC: MySQL sales DB (customers, orders)
 │   │   │   ├── pipeline.yml
 │   │   │   └── bronze_ingestion.py
 │   │   └── manage/           ← JDBC: PostgreSQL manage DB (users, projects, tasks, issues)
 │   │       ├── pipeline.yml
 │   │       └── bronze_ingestion.py
-│   └── sdp/runner.py         ← local dev helper → calls spark-pipelines CLI
+│   └── demo/                 ← Local Docker stack (Spark + MySQL + PostgreSQL + Azurite)
 │
 ├── airbyte/                  ← Connection templates (infra in data-platform-infra)
 │   ├── connections/
@@ -97,9 +98,10 @@ pip install -r requirements.txt
 python pipelines/postgres_pipeline.py
 python pipelines/api_pipeline.py
 
-# 4. Spark SDP — batch ingestion (uses platform-spark:4.1 image from infra)
-python spark_sdp/sdp/runner.py ecommerce --dry-run
-python spark_sdp/sdp/runner.py manage    --dry-run
+# 4. Spark SDP — batch ingestion (local demo stack)
+cd sdp/demo && docker compose up --build -d
+docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
 
 # 5. Airbyte — configure connections via Airbyte UI (templates in airbyte/)
 #   Triggers via AirbyteTriggerSyncOperator in data-platform-orchestration
@@ -113,8 +115,8 @@ python spark_sdp/sdp/runner.py manage    --dry-run
 |---|---|---|
 | dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
 | dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
-| Spark MySQL/ecommerce | `bronze/spark_sdp/mysql/sales/bronze_<table>/` | Delta |
-| Spark PostgreSQL/manage | `bronze/spark_sdp/postgresql/manage/bronze_<table>/` | Delta |
+| Spark MySQL/ecommerce | `bronze/sdp/mysql/sales/bronze_<table>/` | Delta |
+| Spark PostgreSQL/manage | `bronze/sdp/postgresql/manage/bronze_<table>/` | Delta |
 | Airbyte | `bronze/airbyte/<source>/<stream>/YYYY/MM/DD/` | Parquet |
 
 ---

@@ -23,5 +23,5 @@ RUN curl -fL -o /opt/spark/jars/delta-spark_2.13-4.0.0.jar \
 
 USER spark
 
-# Keep the container alive — trigger pipelines via: docker exec spark_sdp_demo spark-pipelines run ...
+# Keep the container alive — trigger pipelines via: docker exec sdp_demo spark-pipelines run ...
 CMD ["tail", "-f", "/dev/null"]

@@ -60,7 +60,7 @@ Source              Tool          Bronze path
 ─────────────────────────────────────────────────────────────
 PostgreSQL CDC      dlt           bronze/dlt/postgres/
 REST APIs           dlt           bronze/dlt/api/
-MySQL batch         Spark SDP     bronze/spark_sdp/mysql/sales/
+MySQL batch         Spark SDP     bronze/sdp/mysql/sales/
 GitHub Events       Airbyte CE    bronze/airbyte/github/
 Open-Meteo          Airbyte CE    bronze/airbyte/openmeteo/
 Exchange Rates      Airbyte CE    bronze/airbyte/exchangerates/

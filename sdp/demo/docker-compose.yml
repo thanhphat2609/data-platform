@@ -97,7 +97,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.spark
-    container_name: spark_sdp_demo
+    container_name: sdp_demo
     environment:
       # MySQL
       MYSQL_HOST:     mysql

@@ -32,8 +32,8 @@
                         │                          │
                         │  dlt/postgres/           │
                         │  dlt/api/                │
-                        │  spark_sdp/mysql/        │
-                        │  spark_sdp/postgresql/   │
+                        │  sdp/mysql/        │
+                        │  sdp/postgresql/   │
                         │  airbyte/github/         │
                         │  airbyte/openmeteo/      │
                         │  airbyte/exchangerates/  │
@@ -58,7 +58,7 @@ Python-native EL for sources needing **incremental state tracking**:
 - State persisted in `.dlt/pipelines/` — only new/changed rows loaded on each run
 - Filesystem destination → MinIO `s3://bronze/dlt/`
 
-### spark_sdp/
+### sdp/
 **PySpark 4.1 Declarative Pipelines** (`pyspark[pipelines]`) for bulk batch ingestion:
 - `spark-pipelines` CLI reads a YAML spec and discovers Python modules via glob
 - Python modules declare views with `@dp.materialized_view` — no custom runner code
@@ -90,16 +90,16 @@ make build-spark      → platform-spark:4.1 image built
 python pipelines/postgres_pipeline.py  → bronze/dlt/postgres/<table>/
 python pipelines/api_pipeline.py       → bronze/dlt/api/<stream>/
 
-# Spark SDP (data-platform-ingestion/spark_sdp/)
-python sdp/runner.py ecommerce --dry-run
-  → bronze/spark_sdp/mysql/sales/bronze_customers/
-  → bronze/spark_sdp/mysql/sales/bronze_orders/
+# Spark SDP (data-platform-ingestion/sdp/)
+docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+  → bronze/sdp/mysql/sales/bronze_customers/
+  → bronze/sdp/mysql/sales/bronze_orders/
 
-python sdp/runner.py manage --dry-run
-  → bronze/spark_sdp/postgresql/manage/bronze_users/
-  → bronze/spark_sdp/postgresql/manage/bronze_projects/
-  → bronze/spark_sdp/postgresql/manage/bronze_tasks/
-  → bronze/spark_sdp/postgresql/manage/bronze_issues/
+docker exec sdp_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
+  → bronze/sdp/postgresql/manage/bronze_users/
+  → bronze/sdp/postgresql/manage/bronze_projects/
+  → bronze/sdp/postgresql/manage/bronze_tasks/
+  → bronze/sdp/postgresql/manage/bronze_issues/
 
 # Airbyte → deploy server + workers (data-platform-infra)
 #   connections configured via Airbyte UI (templates in airbyte/)

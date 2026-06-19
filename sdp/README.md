@@ -1,4 +1,4 @@
-# spark_sdp — Spark Declarative Pipelines (PySpark 4.1)
+# sdp — Spark Declarative Pipelines (PySpark 4.1)
 
 Batch ingestion from MySQL and PostgreSQL → Azure Blob Storage bronze using **PySpark 4.1 Declarative Pipelines** (`spark-pipelines` CLI).
 
@@ -34,7 +34,7 @@ MySQL `ecommerce` DB            PostgreSQL `manage` DB
 ## Pipeline structure
 
 ```
-spark_sdp/
+sdp/
 ├── pipelines/
 │   ├── schema/
 │   │   ├── __init__.py           ← package marker
@@ -142,7 +142,7 @@ Destination: Azurite (Azure Blob Storage emulator).
 ### 1. Start the stack
 
 ```bash
-cd spark_sdp/demo
+cd sdp/demo
 docker compose up --build -d
 ```
 
@@ -151,17 +151,17 @@ docker compose up --build -d
 | `sdp_mysql` | MySQL 8.4 — `ecommerce` DB, 5 tables + seed data |
 | `sdp_postgres` | PostgreSQL 15 — `manage` DB, 5 tables + seed data |
 | `sdp_azurite` | Azure Blob emulator — `bronze` container on host port 10000 |
-| `spark_sdp_demo` | Spark 4.1 with hadoop-azure — kept alive for exec |
+| `sdp_demo` | Spark 4.1 with hadoop-azure — kept alive for exec |
 
 ### 2. Run pipelines
 
 ```bash
 # MySQL ecommerce → Azurite (5 tables, incremental queries)
-docker exec spark_sdp_demo spark-pipelines run \
+docker exec sdp_demo spark-pipelines run \
   --spec /opt/spark/pipeline/ecommerce/pipeline.yml
 
 # PostgreSQL manage → Azurite (5 tables, incremental queries)
-docker exec spark_sdp_demo spark-pipelines run \
+docker exec sdp_demo spark-pipelines run \
   --spec /opt/spark/pipeline/manage/pipeline.yml
 ```
 
