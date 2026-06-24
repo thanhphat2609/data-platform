@@ -32,7 +32,7 @@ _JDBC_OPTIONS = {
     "fetchsize": "10000",
 }
 
-_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/ingestion/manage"
+_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/manage"
 
 _PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in PostgreSQL source
 

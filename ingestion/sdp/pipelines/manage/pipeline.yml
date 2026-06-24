@@ -5,7 +5,7 @@ libraries:
       include: bronze_ingestion.py
 
 # Delta metadata / checkpoint root
-storage: "wasb://bronze@devstoreaccount1.blob.core.windows.net/ingestion/manage"
+storage: "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/manage"
 
 database: default
 
@@ -15,7 +15,7 @@ configuration:
   # Delta Lake
   spark.sql.extensions:            "io.delta.sql.DeltaSparkSessionExtension"
   spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
-  spark.sql.warehouse.dir:         "wasb://bronze@devstoreaccount1.blob.core.windows.net/ingestion/warehouse"
+  spark.sql.warehouse.dir:         "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/warehouse"
 
   # Azure Blob Storage — Azurite emulator
   # devstoreaccount1.blob.core.windows.net resolves to azurite:80 via docker network alias

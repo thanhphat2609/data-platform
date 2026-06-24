@@ -25,7 +25,7 @@ MySQL `ecommerce` DB            PostgreSQL `manage` DB
            │                             │
            ▼                             ▼
   wasb://bronze/.../               wasb://bronze/.../
-  ingestion/ecommerce/             ingestion/manage/
+  sdp/ecommerce/             sdp/manage/
   partitioned by ingestion_date    partitioned by ingestion_date
 ```
 
@@ -75,7 +75,7 @@ _customers_schema = StructType([
 # ecommerce/bronze_ingestion.py
 from schema.ecommerce import *
 
-_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/ingestion/ecommerce"
+_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/ecommerce"
 _PARTITION_COLS  = ["ingestion_date"]
 ```
 
@@ -173,7 +173,7 @@ Use `dry-run` instead of `run` to validate the plan without writing data.
 
 ```
 wasb://bronze@devstoreaccount1.blob.core.windows.net/
-└── ingestion/
+└── sdp/
     ├── ecommerce/                    (MySQL ecommerce DB)
     │   ├── bronze_customers/
     │   ├── bronze_orders/
@@ -189,6 +189,51 @@ wasb://bronze@devstoreaccount1.blob.core.windows.net/
         └── bronze_comments/
             └── ingestion_date=YYYY-MM-DD/
 ```
+
+---
+
+## Production (real Azure Blob Storage)
+
+The demo stack uses Azurite (the Azure Blob emulator). For real Azure, three values change across
+`bronze_ingestion.py` and `pipeline.yml` in both pipeline folders.
+
+### What to replace
+
+| Location | Demo (Azurite) | Production |
+|---|---|---|
+| `_INGESTION_PATH` in `bronze_ingestion.py` | `wasb://bronze@devstoreaccount1.blob.core.windows.net/...` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/...` |
+| `storage:` in `pipeline.yml` | `wasb://bronze@devstoreaccount1.blob.core.windows.net/...` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/...` |
+| `spark.sql.warehouse.dir` in `pipeline.yml` | `wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/warehouse` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/sdp/warehouse` |
+| Account key config property name | `...devstoreaccount1.blob.core.windows.net` | `...<ACCOUNT>.blob.core.windows.net` |
+| Account key value | Azurite default key | Your real storage account key |
+
+### Example — ecommerce pipeline with real Azure
+
+`pipelines/ecommerce/bronze_ingestion.py`:
+```python
+# Replace this line:
+_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/ecommerce"
+# With:
+_INGESTION_PATH = "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/ecommerce"
+```
+
+`pipelines/ecommerce/pipeline.yml`:
+```yaml
+# Replace:
+storage: "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/ecommerce"
+# With:
+storage: "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/ecommerce"
+
+configuration:
+  spark.sql.warehouse.dir: "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/warehouse"
+
+  # Remove the devstoreaccount1 key, add your account key:
+  spark.hadoop.fs.azure.account.key.<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net: "<YOUR_ACCESS_KEY>"
+```
+
+> **Where to get the values** — Azure Portal → Storage accounts → your account →
+> **Security + networking → Access keys** → copy Key1 or Key2.
+> The `bronze` container must exist in your storage account before running.
 
 ---
 

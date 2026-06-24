@@ -107,8 +107,8 @@ Open **http://MASTER_VM_IP:3000** for the Dagster UI.
 |--------|------|--------|
 | dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
 | dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
-| Spark MySQL/ecommerce | `bronze/sdp/mysql/sales/bronze_<table>/` | Delta |
-| Spark PostgreSQL/manage | `bronze/sdp/postgresql/manage/bronze_<table>/` | Delta |
+| Spark MySQL/ecommerce | `bronze/sdp/ecommerce/bronze_<table>/` | Delta |
+| Spark PostgreSQL/manage | `bronze/sdp/manage/bronze_<table>/` | Delta |
 
 ---
 

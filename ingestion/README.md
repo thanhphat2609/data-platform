@@ -56,8 +56,8 @@ Source               Tool        Bronze path
 ────────────────────────────────────────────────────────
 PostgreSQL CDC       dlt         bronze/dlt/postgres/
 REST APIs            dlt         bronze/dlt/api/
-MySQL batch          Spark SDP   bronze/sdp/mysql/sales/
-PostgreSQL batch     Spark SDP   bronze/sdp/postgresql/manage/
+MySQL batch          Spark SDP   bronze/sdp/ecommerce/
+PostgreSQL batch     Spark SDP   bronze/sdp/manage/
 ```
 
 ---
