@@ -24,7 +24,7 @@ MySQL `ecommerce` DB            PostgreSQL `manage` DB
      + incremental query)          + incremental query)
            │                             │
            ▼                             ▼
-  wasb://bronze/.../               wasb://bronze/.../
+  abfss://bronze/.../               abfss://bronze/.../
   sdp/ecommerce/             sdp/manage/
   partitioned by ingestion_date    partitioned by ingestion_date
 ```
@@ -75,7 +75,7 @@ _customers_schema = StructType([
 # ecommerce/bronze_ingestion.py
 from schema.ecommerce import *
 
-_INGESTION_PATH = "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/ecommerce"
+_INGESTION_PATH = "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/ecommerce"
 _PARTITION_COLS  = ["ingestion_date"]
 ```
 
@@ -172,7 +172,7 @@ Use `dry-run` instead of `run` to validate the plan without writing data.
 ## Bronze output
 
 ```
-wasb://bronze@dataplatformstrorage.blob.core.windows.net/
+abfss://bronze@dataplatformstrorage.dfs.core.windows.net/
 └── sdp/
     ├── ecommerce/                    (MySQL ecommerce DB)
     │   ├── bronze_customers/
@@ -201,10 +201,10 @@ The demo stack uses Azurite (the Azure Blob emulator). For real Azure, three val
 
 | Location | Demo (Azurite) | Production |
 |---|---|---|
-| `_INGESTION_PATH` in `bronze_ingestion.py` | `wasb://bronze@dataplatformstrorage.blob.core.windows.net/...` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/...` |
-| `storage:` in `pipeline.yml` | `wasb://bronze@dataplatformstrorage.blob.core.windows.net/...` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/...` |
-| `spark.sql.warehouse.dir` in `pipeline.yml` | `wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/warehouse` | `wasbs://bronze@<ACCOUNT>.blob.core.windows.net/sdp/warehouse` |
-| Account key config property name | `...dataplatformstrorage.blob.core.windows.net` | `...<ACCOUNT>.blob.core.windows.net` |
+| `_INGESTION_PATH` in `bronze_ingestion.py` | `abfss://bronze@dataplatformstrorage.dfs.core.windows.net/...` | `abfss://bronze@<ACCOUNT>.dfs.core.windows.net/...` |
+| `storage:` in `pipeline.yml` | `abfss://bronze@dataplatformstrorage.dfs.core.windows.net/...` | `abfss://bronze@<ACCOUNT>.dfs.core.windows.net/...` |
+| `spark.sql.warehouse.dir` in `pipeline.yml` | `abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/warehouse` | `abfss://bronze@<ACCOUNT>.dfs.core.windows.net/sdp/warehouse` |
+| Account key config property name | `...dataplatformstrorage.dfs.core.windows.net` | `...<ACCOUNT>.dfs.core.windows.net` |
 | Account key value | Azurite default key | Your real storage account key |
 
 ### Example — ecommerce pipeline with real Azure
@@ -212,23 +212,23 @@ The demo stack uses Azurite (the Azure Blob emulator). For real Azure, three val
 `pipelines/ecommerce/bronze_ingestion.py`:
 ```python
 # Replace this line:
-_INGESTION_PATH = "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/ecommerce"
+_INGESTION_PATH = "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/ecommerce"
 # With:
-_INGESTION_PATH = "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/ecommerce"
+_INGESTION_PATH = "abfss://bronze@<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net/sdp/ecommerce"
 ```
 
 `pipelines/ecommerce/pipeline.yml`:
 ```yaml
 # Replace:
-storage: "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/ecommerce"
+storage: "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/ecommerce"
 # With:
-storage: "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/ecommerce"
+storage: "abfss://bronze@<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net/sdp/ecommerce"
 
 configuration:
-  spark.sql.warehouse.dir: "wasbs://bronze@<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net/sdp/warehouse"
+  spark.sql.warehouse.dir: "abfss://bronze@<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net/sdp/warehouse"
 
   # Remove the dataplatformstrorage key, add your account key:
-  spark.hadoop.fs.azure.account.key.<YOUR_STORAGE_ACCOUNT>.blob.core.windows.net: "<YOUR_ACCESS_KEY>"
+  spark.hadoop.fs.azure.account.key.<YOUR_STORAGE_ACCOUNT>.dfs.core.windows.net: "<YOUR_ACCESS_KEY>"
 ```
 
 > **Where to get the values** — Azure Portal → Storage accounts → your account →
@@ -244,7 +244,7 @@ configuration:
 | `apache/spark` | 4.1.0-python3 | Base image |
 | `pyspark[pipelines]` | 4.1.x | spark-pipelines CLI + @dp.materialized_view |
 | `delta-spark_2.13` | 4.0.0 | Delta Lake for Spark 4.1 |
-| `hadoop-azure` | 3.4.1 | Azure Blob Storage (wasb://) filesystem |
+| `hadoop-azure` | 3.4.1 | Azure Blob Storage (abfss://) filesystem |
 | `azure-storage` | 8.6.6 | Azure SDK for hadoop-azure |
 | `mysql-connector-j` | 8.4.0 | MySQL JDBC driver |
 | `postgresql` | 42.7.3 | PostgreSQL JDBC driver |
