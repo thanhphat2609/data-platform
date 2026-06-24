@@ -3,8 +3,15 @@ from pyspark.sql.types import (
     StringType, StructField, StructType, TimestampType,
 )
 
-# ingestion_date is derived via withColumn("ingestion_date", current_date())
-# in bronze_ingestion.py — it does NOT exist in MySQL, but must appear last in every schema here.
+__all__ = [
+    "_customers_schema",
+    "_orders_schema",
+    "_categories_schema",
+    "_products_schema",
+    "_order_items_schema",
+]
+
+
 
 _customers_schema = StructType([
     StructField("id",             IntegerType(),      True),

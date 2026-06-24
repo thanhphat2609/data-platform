@@ -3,6 +3,14 @@ from pyspark.sql.types import (
     StringType, StructField, StructType, TimestampType,
 )
 
+__all__ = [
+    "_users_schema",
+    "_projects_schema",
+    "_tasks_schema",
+    "_issues_schema",
+    "_comments_schema",
+]
+
 _users_schema = StructType([
     StructField("id",             LongType(),      True),
     StructField("username",       StringType(),    True),

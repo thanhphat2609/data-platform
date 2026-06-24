@@ -61,7 +61,9 @@ def _read_table(source_table: str, query: str | None = None):
 @dp.materialized_view(
     name="bronze_customers",
     comment="Raw customers from MySQL ecommerce DB — rolling 30-day window on updated_at",
-    path=f"{_INGESTION_PATH}/bronze_customers",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_customers" 
+    },
     partition_cols=_PARTITION_COLS,
     schema=_customers_schema,
 )
@@ -75,7 +77,9 @@ def bronze_customers():
 @dp.materialized_view(
     name="bronze_orders",
     comment="Raw orders from MySQL ecommerce DB — rolling 30-day window on order_date",
-    path=f"{_INGESTION_PATH}/bronze_orders",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_orders",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_orders_schema,
 )
@@ -89,7 +93,9 @@ def bronze_orders():
 @dp.materialized_view(
     name="bronze_categories",
     comment="Raw product categories from MySQL ecommerce DB — full scan (static reference data)",
-    path=f"{_INGESTION_PATH}/bronze_categories",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_categories",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_categories_schema,
 )
@@ -103,7 +109,9 @@ def bronze_categories():
 @dp.materialized_view(
     name="bronze_products",
     comment="Raw products from MySQL ecommerce DB — rolling 30-day window on updated_at",
-    path=f"{_INGESTION_PATH}/bronze_products",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_products",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_products_schema,
 )
@@ -117,7 +125,9 @@ def bronze_products():
 @dp.materialized_view(
     name="bronze_order_items",
     comment="Raw order line items from MySQL ecommerce DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_order_items",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_order_items",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_order_items_schema,
 )

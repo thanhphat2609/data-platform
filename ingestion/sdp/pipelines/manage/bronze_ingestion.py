@@ -60,7 +60,9 @@ def _read_table(source_table: str, query: str | None = None):
 @dp.materialized_view(
     name="bronze_users",
     comment="Raw users from PostgreSQL manage DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_users",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_users",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_users_schema,
 )
@@ -74,7 +76,9 @@ def bronze_users():
 @dp.materialized_view(
     name="bronze_projects",
     comment="Raw projects from PostgreSQL manage DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_projects",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_projects",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_projects_schema,
 )
@@ -88,7 +92,9 @@ def bronze_projects():
 @dp.materialized_view(
     name="bronze_tasks",
     comment="Raw tasks from PostgreSQL manage DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_tasks",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_tasks",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_tasks_schema,
 )
@@ -102,7 +108,9 @@ def bronze_tasks():
 @dp.materialized_view(
     name="bronze_issues",
     comment="Raw issues from PostgreSQL manage DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_issues",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_issues",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_issues_schema,
 )
@@ -116,7 +124,9 @@ def bronze_issues():
 @dp.materialized_view(
     name="bronze_comments",
     comment="Raw comments from PostgreSQL manage DB — rolling 30-day window on created_at",
-    path=f"{_INGESTION_PATH}/bronze_comments",
+    table_properties={
+        "location": f"{_INGESTION_PATH}/bronze_comments",
+    },
     partition_cols=_PARTITION_COLS,
     schema=_comments_schema,
 )

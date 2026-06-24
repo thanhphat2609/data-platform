@@ -1,8 +1,9 @@
-FROM apache/spark:4.1.0-python3
+FROM apache/spark:4.1.2-python3
 
 USER root
 
-RUN pip install "pyspark[pipelines]>=4.1.0"
+RUN pip install --upgrade --no-cache-dir "pyspark[pipelines]>=4.1.2" && \
+    rm -rf /opt/spark/python/pyspark
 
 # Combine all JAR downloads into a single layer to optimize image size
 RUN curl -fL -o /opt/spark/jars/delta-spark_2.13-4.0.0.jar \
@@ -24,6 +25,8 @@ RUN curl -fL -o /opt/spark/jars/delta-spark_2.13-4.0.0.jar \
     # MySQL JDBC Driver
     curl -fL -o /opt/spark/jars/mysql-connector-j-8.4.0.jar \
         https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
+
+ENV PYTHONPATH=/usr/local/lib/python3.10/dist-packages:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
 
 USER spark
 
