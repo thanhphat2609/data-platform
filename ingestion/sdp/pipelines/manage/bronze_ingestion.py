@@ -10,7 +10,7 @@ import os
 import sys
 
 # Make the schema package importable when spark-pipelines executes this file directly
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append("/opt/spark/pipeline")
 
 from pyspark import pipelines as dp
 from pyspark.sql import SparkSession
