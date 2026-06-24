@@ -33,7 +33,7 @@ _JDBC_OPTIONS = {
     "fetchsize": "10000",
 }
 
-_INGESTION_PATH = "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/ecommerce"
+_INGESTION_PATH = "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/ecommerce"
 
 _PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in MySQL source
 

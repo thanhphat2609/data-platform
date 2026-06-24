@@ -5,7 +5,7 @@ libraries:
       include: bronze_ingestion.py
 
 # Delta metadata / checkpoint root
-storage: "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/ecommerce"
+storage: "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/ecommerce"
 
 database: default
 
@@ -15,11 +15,11 @@ configuration:
   # Delta Lake
   spark.sql.extensions:            "io.delta.sql.DeltaSparkSessionExtension"
   spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
-  spark.sql.warehouse.dir:         "wasb://bronze@devstoreaccount1.blob.core.windows.net/sdp/warehouse"
+  spark.sql.warehouse.dir:         "wasb://bronze@dataplatformstrorage.blob.core.windows.net/sdp/warehouse"
 
   # Azure Blob Storage — Azurite emulator
-  # devstoreaccount1.blob.core.windows.net resolves to azurite:80 via docker network alias
-  spark.hadoop.fs.azure.account.key.devstoreaccount1.blob.core.windows.net: "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw=="
+  # dataplatformstrorage.blob.core.windows.net resolves to azurite:80 via docker network alias
+  spark.hadoop.fs.azure.account.key.dataplatformstrorage.blob.core.windows.net: "IF0VxOt9qrjqA5E+h1x1qNtUl13YyAMGp2NTL7zwH9o7kqBVhSuBkLzUbN0WZM803syy5Uy18JUo+AStKGJ4vA=="
 
   # DataFlint observability — not included in demo image; add JAR to enable
   # spark.plugins: "io.dataflint.spark.SparkDataflintPlugin"
