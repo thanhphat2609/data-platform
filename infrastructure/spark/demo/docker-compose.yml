@@ -14,7 +14,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./seed/postgres:/docker-entrypoint-initdb.d:ro
+      - ./postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d manage"]
       interval: 10s
@@ -38,7 +38,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
+      - ./mysql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uadmin", "-padmin123"]
       interval: 10s
@@ -95,7 +95,7 @@ services:
   # ─────────────────────────────────────────
   spark:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile.spark
     container_name: sdp_demo
     environment:
@@ -114,14 +114,12 @@ services:
     ports:
       - "4040:4040"   # Spark UI
     volumes:
-      - ../pipelines:/opt/spark/pipeline
+      - ../../../ingestion/sdp/pipelines:/opt/spark/pipeline
     depends_on:
       postgres:
         condition: service_healthy
       mysql:
         condition: service_healthy
-      azurite-init:
-        condition: service_completed_successfully
     networks:
       - sdp_network
 
