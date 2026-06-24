@@ -27,7 +27,7 @@ Each asset op is tagged `{"dagster-celery/queue": "worker-N"}` — Dagster route
 
 ```bash
 ssh ubuntu@WORKER_VM_IP
-git clone https://github.com/YOUR_ORG/data-platform.git
+git clone https://github.com/thanhphat2669/data-platform.git
 cd data-platform
 ```
 

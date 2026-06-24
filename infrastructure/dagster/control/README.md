@@ -28,7 +28,7 @@ Postgres and Redis ports are exposed so worker VMs can connect.
 
 ```bash
 ssh ubuntu@MASTER_VM_IP
-git clone https://github.com/YOUR_ORG/data-platform.git
+git clone https://github.com/thanhphat2669/data-platform.git
 cd data-platform
 ```
 

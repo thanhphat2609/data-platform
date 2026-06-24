@@ -4,8 +4,8 @@ Batch ingestion from MySQL and PostgreSQL → Azure Blob Storage bronze using **
 
 YAML-driven spec. Python modules with `@dp.materialized_view`. No custom runner code.
 
-> **Note:** Production Spark runs are triggered by **Airflow** in `data-platform-orchestration`.  
-> The Spark runtime image lives in [data-platform-infra](https://github.com/thanhphat2609/data-platform-infra) (`spark/Dockerfile`).
+> **Note:** Production Spark runs are triggered by **Dagster** in [`orchestration/`](../../orchestration/README.md).  
+> The Spark runtime image lives in [`infrastructure/spark/`](../../infrastructure/spark/README.md) (`Dockerfile.spark`).
 
 ---
 
