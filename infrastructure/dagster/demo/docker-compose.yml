@@ -1,0 +1,240 @@
+services:
+
+  # ─────────────────────────────────────────
+  # Destination: Azure Blob Storage (Azurite)
+  # Used by Spark SDP pipelines.
+  # Both .blob and .dfs aliases so hadoop-azure
+  # ABFS driver resolves to this container.
+  # ─────────────────────────────────────────
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: demo_azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 80
+    ports:
+      - "10000:80"
+    volumes:
+      - azurite_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      demo_network:
+        aliases:
+          - dataplatformstrorage.blob.core.windows.net
+          - dataplatformstrorage.dfs.core.windows.net
+
+  azurite-init:
+    image: mcr.microsoft.com/azure-cli:latest
+    container_name: demo_azurite_init
+    depends_on:
+      azurite:
+        condition: service_healthy
+    command: >
+      az storage container create
+        --name bronze
+        --connection-string
+        "DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://azurite/dataplatformstrorage;"
+    restart: "no"
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Dagster metadata database
+  # ─────────────────────────────────────────
+  dagster-db:
+    image: postgres:15-alpine
+    container_name: demo_dagster_db
+    environment:
+      POSTGRES_DB:       dagster
+      POSTGRES_USER:     dagster
+      POSTGRES_PASSWORD: dagster
+    ports:
+      - "5434:5432"
+    volumes:
+      - dagster_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Dagster — webserver (UI on :3000)
+  # Single-node: DefaultRunLauncher (no Celery)
+  #
+  # dlt assets  → real Azure (AZURE_STORAGE_*)
+  # SDP assets  → docker exec demo_spark via Docker socket
+  # ─────────────────────────────────────────
+  dagster-webserver:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: demo_dagster_webserver
+    command: dagster-webserver -h 0.0.0.0 -p 3000
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      # dlt assets — real Azure Blob Storage
+      DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
+      # SDP assets — Spark container name for docker exec
+      SPARK_CONTAINER_NAME: demo_spark
+    volumes:
+      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      dagster-db:
+        condition: service_healthy
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Dagster — daemon (scheduler + sensor)
+  # ─────────────────────────────────────────
+  dagster-daemon:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: demo_dagster_daemon
+    command: dagster-daemon run
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
+      SPARK_CONTAINER_NAME: demo_spark
+    volumes:
+      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      dagster-db:
+        condition: service_healthy
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Source: PostgreSQL — dlt platform DB
+  # Tables: orders, customers, products
+  # ─────────────────────────────────────────
+  postgres-platform:
+    image: postgres:15
+    container_name: demo_postgres_platform
+    environment:
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB:       platform
+    ports:
+      - "5431:5432"
+    volumes:
+      - postgres_platform_data:/var/lib/postgresql/data
+      - ../../../ingestion/dlt/demo/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Source: MySQL — SDP ecommerce DB
+  # Tables: customers, orders, products, order_items, categories
+  # ─────────────────────────────────────────
+  mysql-ecommerce:
+    image: mysql:8.4
+    container_name: demo_mysql_ecommerce
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE:      ecommerce
+      MYSQL_USER:          admin
+      MYSQL_PASSWORD:      admin123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../../../ingestion/sdp/demo/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uadmin", "-padmin123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Source: PostgreSQL — SDP manage DB
+  # Tables: users, projects, tasks, issues, comments
+  # ─────────────────────────────────────────
+  postgres-manage:
+    image: postgres:15
+    container_name: demo_postgres_manage
+    environment:
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB:       manage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_manage_data:/var/lib/postgresql/data
+      - ../../../ingestion/sdp/demo/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d manage"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Spark — SDP runner (kept alive for exec)
+  # Dagster SDP assets call docker exec demo_spark
+  # via the Docker socket mounted above.
+  # ─────────────────────────────────────────
+  spark:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/spark/Dockerfile.spark
+    container_name: demo_spark
+    environment:
+      MYSQL_HOST:          mysql-ecommerce
+      MYSQL_PORT:          "3306"
+      MYSQL_DB:            ecommerce
+      MYSQL_USER:          admin
+      MYSQL_PASSWORD:      admin123
+      POSTGRES_HOST:       postgres-manage
+      POSTGRES_PORT:       "5432"
+      POSTGRES_MANAGE_DB:  manage
+      POSTGRES_USER:       admin
+      POSTGRES_PASSWORD:   admin123
+    ports:
+      - "4040:4040"
+    volumes:
+      - ../../../ingestion/sdp/pipelines:/opt/spark/pipeline
+    depends_on:
+      azurite-init:
+        condition: service_completed_successfully
+      mysql-ecommerce:
+        condition: service_healthy
+      postgres-manage:
+        condition: service_healthy
+    networks:
+      - demo_network
+
+volumes:
+  azurite_data:
+  dagster_db_data:
+  postgres_platform_data:
+  postgres_manage_data:
+  mysql_data:
+
+networks:
+  demo_network:
+    driver: bridge

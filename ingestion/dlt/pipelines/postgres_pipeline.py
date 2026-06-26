@@ -1,8 +1,8 @@
 """
-PostgreSQL full-copy pipeline → MinIO bronze/dlt/postgres/
+CRM full-copy pipeline → Azure Blob bronze/dlt/crm/
 
 Reads all rows on every run (replace disposition — no incremental state needed).
-Output path: s3://bronze/dlt/postgres/<table>/_dlt_load_id=<id>/*.parquet
+Output path: az://bronze/dlt/crm/<table>/ingestion_date=<date>/<load_id>.<file_id>.parquet
 """
 import os
 from typing import Iterator
@@ -21,8 +21,8 @@ def _connect() -> psycopg2.extensions.connection:
     return psycopg2.connect(_CONN_STR, cursor_factory=RealDictCursor)
 
 
-@dlt.source(name="postgres")
-def postgres_source():
+@dlt.source(name="crm")
+def crm_source():
     return [orders(), customers(), products()]
 
 
@@ -49,9 +49,9 @@ def products() -> Iterator[dict]:
 
 if __name__ == "__main__":
     pipeline = dlt.pipeline(
-        pipeline_name="postgres",
+        pipeline_name="crm_ingestion",
         destination="filesystem",
-        dataset_name="postgres",
+        dataset_name="crm",
     )
-    load_info = pipeline.run(postgres_source())
+    load_info = pipeline.run(crm_source())
     print(load_info)

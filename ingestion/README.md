@@ -22,7 +22,7 @@ PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
       └────────────────┴──────────────┴────────────────┘
                                  │
                     ┌────────────▼────────────┐
-                    │    MinIO  (bronze/)      │
+                    │  Azure Blob (bronze/)    │
                     │   Parquet / Delta Lake   │
                     └─────────────────────────┘
 ```
@@ -52,66 +52,83 @@ PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
 ### Source → tool → bronze mapping
 
 ```
-Source               Tool        Bronze path
-────────────────────────────────────────────────────────
-PostgreSQL CDC       dlt         bronze/dlt/postgres/
-REST APIs            dlt         bronze/dlt/api/
-MySQL batch          Spark SDP   bronze/sdp/ecommerce/
-PostgreSQL batch     Spark SDP   bronze/sdp/manage/
+Source                     Tool        Bronze path
+──────────────────────────────────────────────────────────────
+PostgreSQL platform DB     dlt         bronze/dlt/crm/
+REST APIs                  dlt         bronze/dlt/events/
+MySQL ecommerce DB         Spark SDP   bronze/sdp/ecommerce/
+PostgreSQL manage DB       Spark SDP   bronze/sdp/manage/
 ```
 
 ---
 
 ## Bronze layer convention
 
-All raw data lands in `bronze/` with no transformations. Path structure encodes **tool → source → stream → partition**.
+All raw data lands in `bronze/` with no transformations.  
+Both tools use **Hive-style `ingestion_date=YYYY-MM-DD` partitioning** for consistent downstream reads.
 
 ```
 bronze/
 ├── dlt/
-│   ├── postgres/
-│   │   ├── orders/_dlt_load_id=<uuid>/*.parquet
-│   │   ├── customers/_dlt_load_id=<uuid>/*.parquet
-│   │   └── products/_dlt_load_id=<uuid>/*.parquet
+│   ├── platform/
+│   │   ├── orders/
+│   │   │   └── ingestion_date=YYYY-MM-DD/
+│   │   │       └── <load_id>.<file_id>.parquet
+│   │   ├── customers/
+│   │   │   └── ingestion_date=YYYY-MM-DD/
+│   │   └── products/
+│   │       └── ingestion_date=YYYY-MM-DD/
 │   └── api/
-│       ├── github_events/_dlt_load_id=<uuid>/
-│       └── openmeteo_hourly/_dlt_load_id=<uuid>/
+│       ├── github_events/
+│       │   └── ingestion_date=YYYY-MM-DD/
+│       ├── openmeteo_hourly/
+│       │   └── ingestion_date=YYYY-MM-DD/
+│       └── exchange_rates/
+│           └── ingestion_date=YYYY-MM-DD/
 │
 └── sdp/
-    ├── mysql/sales/
-    │   ├── bronze_customers/_delta_log/ + part-*.parquet
-    │   └── bronze_orders/_delta_log/   + part-*.parquet
-    └── postgresql/manage/
+    ├── ecommerce/
+    │   ├── bronze_customers/
+    │   ├── bronze_orders/
+    │   ├── bronze_categories/
+    │   ├── bronze_products/
+    │   └── bronze_order_items/
+    │       └── ingestion_date=YYYY-MM-DD/   ← Delta partition
+    └── manage/
         ├── bronze_users/
         ├── bronze_projects/
         ├── bronze_tasks/
-        └── bronze_issues/
+        ├── bronze_issues/
+        └── bronze_comments/
+            └── ingestion_date=YYYY-MM-DD/   ← Delta partition
 ```
 
 ### Partition strategy
 
-| Tool | Partition key | Rationale |
-|------|--------------|-----------|
-| **dlt** | `_dlt_load_id=<uuid>` | Each load is atomic — query by load ID for a consistent snapshot |
-| **Spark SDP** | None (Delta-managed) | Full Delta table — use `VERSION AS OF` or `TIMESTAMP AS OF` for time-travel |
+| Tool | Partition key | Set by |
+|------|--------------|--------|
+| **dlt** | `ingestion_date=YYYY-MM-DD` | `layout` in `.dlt/config.toml` (`{curr_date}`) |
+| **Spark SDP** | `ingestion_date=YYYY-MM-DD` | `F.current_date()` added in `_read_table()` |
 
 ### Naming rules
 
 1. Lowercase directory names throughout
 2. Underscores, not hyphens (`bronze_orders`, not `bronze-orders`)
-3. Tool prefix first (`dlt/`, `sdp/`) — provenance is visible in MinIO UI
+3. Tool prefix first (`dlt/`, `sdp/`) — provenance is visible in Azure Storage Explorer
 4. No credentials, PII, or secrets in paths
 
 ### Reading bronze downstream
 
 ```sql
--- dlt (Parquet, Hive partitioning)
-SELECT * FROM hive.bronze."dlt/postgres/orders";
+-- dlt (Parquet, date-partitioned)
+SELECT * FROM read_parquet(
+  'az://bronze/dlt/crm/orders/ingestion_date=2026-06-26/*.parquet'
+);
 
 -- Spark SDP (Delta Lake — current state)
-SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`;
+SELECT * FROM delta.`abfss://bronze@<account>.dfs.core.windows.net/sdp/ecommerce/bronze_orders`;
 
 -- Spark SDP (Delta time-travel)
-SELECT * FROM delta.`s3a://bronze/sdp/mysql/sales/bronze_orders`
-TIMESTAMP AS OF '2026-05-30 08:00:00';
+SELECT * FROM delta.`abfss://bronze@<account>.dfs.core.windows.net/sdp/ecommerce/bronze_orders`
+TIMESTAMP AS OF '2026-06-26 08:00:00';
 ```

@@ -40,8 +40,12 @@ PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
 data-platform/
 │
 ├── ingestion/                    ← EL pipelines
-│   ├── dlt/                      Python-native CDC + REST
-│   └── sdp/                      Spark Declarative Pipelines (batch)
+│   ├── dlt/                      Python-native CDC + REST APIs
+│   │   └── demo/                 Demo: MinIO + PostgreSQL + dlt runners + seed data
+│   └── sdp/                      Spark Declarative Pipelines (batch JDBC)
+│       ├── pipelines/            spark-pipelines specs + @dp.materialized_view
+│       └── demo/                 Self-contained demo: MySQL + PostgreSQL + Azurite + Spark
+│           └── Dockerfile.spark  Spark image with Delta + JDBC + Azure JARs
 │
 ├── orchestration/                ← Dagster software-defined assets
 │   ├── assets/                   Asset definitions (sales, sap)
@@ -50,11 +54,12 @@ data-platform/
 │   ├── resources/                IO managers
 │   └── src/                      Business logic
 │
-└── infrastructure/               ← Deployment
+└── infrastructure/               ← Deployment + all Dockerfiles
     ├── dagster/                  Docker Compose — webserver, daemon, workers
     │   ├── control/              Master VM (postgres + redis + UI + daemon)
     │   └── worker/               Worker VMs (Celery workers)
-    └── spark/                    Custom Spark 4.1 image (Delta + JDBC + Azure Blob)
+    ├── spark/                    Spark 4.1 image (Delta + JDBC + Azure Blob)
+    └── dlt/                      dlt runner image (Python 3.11 + dlt deps)
 ```
 
 ---
@@ -68,36 +73,54 @@ cp .env.example .env
 # Edit .env — set AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, DAGSTER_POSTGRES_PASSWORD
 ```
 
-### 2. Ingestion — dlt
+### 2. Ingestion — dlt (Docker demo)
 
 ```bash
-cd ingestion/dlt
-pip install -r requirements.txt
-python pipelines/postgres_pipeline.py
-python pipelines/api_pipeline.py
+cd ingestion/dlt/demo
+docker compose up --build
 ```
 
-### 3. Ingestion — Spark SDP
+Pipelines exit on completion. Browse results in Azure Storage Explorer at `http://localhost:10000` (Azurite).
 
 ```bash
-cd infrastructure/spark
+# Re-run individual pipelines
+docker compose run --rm dlt-postgres
+docker compose run --rm dlt-api
+```
+
+### 3. Ingestion — Spark SDP (Docker demo)
+
+```bash
+cd ingestion/sdp/demo
 docker compose up --build -d
 
-docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
-docker exec spark_demo spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
+# Run ecommerce pipeline (MySQL → Azurite)
+docker exec sdp_demo spark-pipelines run \
+  --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+
+# Run manage pipeline (PostgreSQL → Azurite)
+docker exec sdp_demo spark-pipelines run \
+  --spec /opt/spark/pipeline/manage/pipeline.yml
 ```
 
-### 4. Orchestration — Dagster
+### 4. Orchestration — Dagster (demo, single-node)
 
 ```bash
-# Master VM
-docker compose -f infrastructure/dagster/control/docker-compose.yml up -d
+# Set Azure credentials (used by dlt assets)
+export AZURE_STORAGE_ACCOUNT_NAME=<your-account>
+export AZURE_STORAGE_ACCOUNT_KEY=<your-key>
 
-# Worker VMs (set MASTER_VM_IP in .env)
-docker compose -f infrastructure/dagster/worker/docker-compose.yml up -d
+cd infrastructure/dagster/demo
+docker compose up --build -d
 ```
 
-Open **http://MASTER_VM_IP:3000** for the Dagster UI.
+Open **http://localhost:3000** for the Dagster UI.
+
+> **Production (multi-VM + Celery):**
+> ```bash
+> docker compose -f infrastructure/dagster/control/docker-compose.yml up -d   # master
+> docker compose -f infrastructure/dagster/worker/docker-compose.yml up -d    # workers
+> ```
 
 ---
 
@@ -105,10 +128,10 @@ Open **http://MASTER_VM_IP:3000** for the Dagster UI.
 
 | Source | Path | Format |
 |--------|------|--------|
-| dlt PostgreSQL CDC | `bronze/dlt/postgres/<table>/_dlt_load_id=*/` | Parquet |
-| dlt REST APIs | `bronze/dlt/api/<stream>/_dlt_load_id=*/` | Parquet |
-| Spark MySQL/ecommerce | `bronze/sdp/ecommerce/bronze_<table>/` | Delta |
-| Spark PostgreSQL/manage | `bronze/sdp/manage/bronze_<table>/` | Delta |
+| dlt CRM (PostgreSQL platform DB) | `bronze/dlt/crm/<table>/ingestion_date=YYYY-MM-DD/` | Parquet |
+| dlt Events (REST APIs) | `bronze/dlt/events/<stream>/ingestion_date=YYYY-MM-DD/` | Parquet |
+| Spark MySQL/ecommerce | `bronze/sdp/ecommerce/bronze_<table>/ingestion_date=YYYY-MM-DD/` | Delta |
+| Spark PostgreSQL/manage | `bronze/sdp/manage/bronze_<table>/ingestion_date=YYYY-MM-DD/` | Delta |
 
 ---
 
@@ -117,5 +140,7 @@ Open **http://MASTER_VM_IP:3000** for the Dagster UI.
 | Layer | README |
 |-------|--------|
 | Ingestion | [ingestion/README.md](ingestion/README.md) |
+| dlt pipelines | [ingestion/dlt/README.md](ingestion/dlt/README.md) |
+| Spark SDP pipelines | [ingestion/sdp/README.md](ingestion/sdp/README.md) |
 | Orchestration | [orchestration/README.md](orchestration/README.md) |
 | Infrastructure | [infrastructure/README.md](infrastructure/README.md) |

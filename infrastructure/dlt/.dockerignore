@@ -1,0 +1,5 @@
+ingestion/dlt/.dlt/secrets.toml
+ingestion/dlt/.dlt/pipelines/
+**/__pycache__/
+**/*.pyc
+.env

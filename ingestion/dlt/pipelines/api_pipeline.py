@@ -1,12 +1,12 @@
 """
-REST API ingestion pipeline → MinIO bronze/dlt/api/
+Events ingestion pipeline → Azure Blob bronze/dlt/events/
 
 Sources:
   - GitHub Events       (incremental by created_at)
   - Open-Meteo Hourly   (incremental by date, free — no key required)
   - Exchange Rates      (incremental by date, fallback to frankfurter.app)
 
-Output path: s3://bronze/dlt/api/<source>/_dlt_load_id=<id>/*.parquet
+Output path: az://bronze/dlt/events/<stream>/ingestion_date=<date>/<load_id>.<file_id>.parquet
 """
 import os
 from datetime import date, datetime, timedelta
@@ -32,8 +32,8 @@ def _http_session() -> requests.Session:
     return session
 
 
-@dlt.source(name="api")
-def api_source():
+@dlt.source(name="events")
+def events_source():
     return [github_events(), openmeteo_hourly(), exchange_rates()]
 
 
@@ -161,9 +161,9 @@ def exchange_rates(
 
 if __name__ == "__main__":
     pipeline = dlt.pipeline(
-        pipeline_name="api_ingestion",
+        pipeline_name="events_ingestion",
         destination="filesystem",
-        dataset_name="api",
+        dataset_name="events",
     )
-    load_info = pipeline.run(api_source())
+    load_info = pipeline.run(events_source())
     print(load_info)

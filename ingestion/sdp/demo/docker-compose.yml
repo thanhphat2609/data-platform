@@ -47,55 +47,59 @@ services:
     networks:
       - sdp_network
 
-  # # ─────────────────────────────────────────
-  # # Destination: Azure Blob Storage (Azurite)
-  # #
-  # # Runs on port 80 inside sdp_network so that
-  # # hadoop-azure resolves dataplatformstrorage.blob.core.windows.net → this container.
-  # # Exposed as localhost:10000 on the host for Azure Storage Explorer.
-  # # ─────────────────────────────────────────
-  # azurite:
-  #   image: mcr.microsoft.com/azure-storage/azurite:latest
-  #   container_name: sdp_azurite
-  #   command: azurite-blob --blobHost 0.0.0.0 --blobPort 80
-  #   ports:
-  #     - "10000:80"
-  #   volumes:
-  #     - azurite_data:/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 12
-  #   networks:
-  #     sdp_network:
-  #       aliases:
-  #         - dataplatformstrorage.blob.core.windows.net   # hadoop-azure connects here on port 80
+  # ─────────────────────────────────────────
+  # Destination: Azure Blob Storage (Azurite)
+  #
+  # Both .blob and .dfs aliases on port 80 so
+  # hadoop-azure ABFS driver (abfss://) resolves
+  # dataplatformstrorage.dfs.core.windows.net
+  # to this container inside sdp_network.
+  # Exposed as localhost:10000 on the host for
+  # Azure Storage Explorer.
+  # ─────────────────────────────────────────
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: sdp_azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 80
+    ports:
+      - "10000:80"
+    volumes:
+      - azurite_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      sdp_network:
+        aliases:
+          - dataplatformstrorage.blob.core.windows.net
+          - dataplatformstrorage.dfs.core.windows.net
 
-  # # ─────────────────────────────────────────
-  # # Azurite bootstrap: create 'bronze' container
-  # # ─────────────────────────────────────────
-  # azurite-init:
-  #   image: mcr.microsoft.com/azure-cli:latest
-  #   container_name: sdp_azurite_init
-  #   depends_on:
-  #     azurite:
-  #       condition: service_healthy
-  #   command: >
-  #     az storage container create
-  #       --name bronze
-  #       --connection-string
-  #       "DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://azurite/dataplatformstrorage;"
-  #   restart: "no"
-  #   networks:
-  #     - sdp_network
+  # ─────────────────────────────────────────
+  # Azurite bootstrap: create 'bronze' container
+  # ─────────────────────────────────────────
+  azurite-init:
+    image: mcr.microsoft.com/azure-cli:latest
+    container_name: sdp_azurite_init
+    depends_on:
+      azurite:
+        condition: service_healthy
+    command: >
+      az storage container create
+        --name bronze
+        --connection-string
+        "DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://azurite/dataplatformstrorage;"
+    restart: "no"
+    networks:
+      - sdp_network
 
   # ─────────────────────────────────────────
   # Spark 4.1 with SDP (spark-pipelines CLI)
   # ─────────────────────────────────────────
   spark:
     build:
-      context: ..
+      context: ../../../infrastructure/spark
       dockerfile: Dockerfile.spark
     container_name: sdp_demo
     environment:
@@ -114,8 +118,10 @@ services:
     ports:
       - "4040:4040"   # Spark UI
     volumes:
-      - ../../../ingestion/sdp/pipelines:/opt/spark/pipeline
+      - ../pipelines:/opt/spark/pipeline
     depends_on:
+      azurite-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       mysql:

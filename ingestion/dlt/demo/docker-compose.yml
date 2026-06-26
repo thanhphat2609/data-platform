@@ -1,0 +1,75 @@
+services:
+
+  # ─────────────────────────────────────────
+  # Source: PostgreSQL — platform DB
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: dlt_postgres
+    environment:
+      POSTGRES_USER:     admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB:       platform
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dlt_network
+
+  # ─────────────────────────────────────────
+  # Pipeline: PostgreSQL → Azure Blob bronze/
+  # Credentials from host env or .env file
+  # ─────────────────────────────────────────
+  dlt-postgres:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dlt/Dockerfile
+    container_name: dlt_postgres_pipeline
+    command: python pipelines/postgres_pipeline.py
+    environment:
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres:5432/platform
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+    volumes:
+      - dlt_state:/app/.dlt/pipelines
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - dlt_network
+
+  # ─────────────────────────────────────────
+  # Pipeline: REST APIs → Azure Blob bronze/
+  # Sources: GitHub Events, Open-Meteo, Exchange Rates
+  # ─────────────────────────────────────────
+  dlt-api:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dlt/Dockerfile
+    container_name: dlt_api_pipeline
+    command: python pipelines/api_pipeline.py
+    environment:
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - dlt_state:/app/.dlt/pipelines
+    restart: "no"
+    networks:
+      - dlt_network
+
+volumes:
+  postgres_data:
+  dlt_state:
+
+networks:
+  dlt_network:
+    driver: bridge

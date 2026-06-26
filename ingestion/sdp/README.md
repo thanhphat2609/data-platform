@@ -5,7 +5,7 @@ Batch ingestion from MySQL and PostgreSQL → Azure Blob Storage bronze using **
 YAML-driven spec. Python modules with `@dp.materialized_view`. No custom runner code.
 
 > **Note:** Production Spark runs are triggered by **Dagster** in [`orchestration/`](../../orchestration/README.md).  
-> The Spark runtime image lives in [`infrastructure/spark/`](../../infrastructure/spark/README.md) (`Dockerfile.spark`).
+> The Spark image (`Dockerfile.spark`) lives in [`infrastructure/spark/`](../../infrastructure/spark/README.md) — the demo `docker-compose.yml` references it from there.
 
 ---
 
@@ -47,11 +47,14 @@ sdp/
 │       ├── pipeline.yml          ← spark-pipelines spec (Azure Blob Storage)
 │       └── bronze_ingestion.py   ← 5 @dp.materialized_view with incremental queries
 └── demo/
-    ├── Dockerfile.spark          ← Spark image with hadoop-azure + JDBC JARs
     ├── docker-compose.yml        ← MySQL + PostgreSQL + Azurite + Spark
-    └── seed/
-        ├── mysql/01_init.sql     ← DDL + seed data for ecommerce DB (5 tables)
-        └── postgres/01_init.sql  ← DDL + seed data for manage DB (5 tables)
+    ├── mysql/
+    │   └── 01_init.sql           ← DDL + seed data for ecommerce DB (5 tables)
+    └── postgres/
+        └── 01_init.sql           ← DDL + seed data for manage DB (5 tables)
+
+# Spark image (referenced by demo/docker-compose.yml):
+# infrastructure/spark/Dockerfile.spark
 ```
 
 ---
@@ -136,13 +139,14 @@ Rule: the column must exist in the DataFrame **at write time**, not in the sourc
 
 ## Demo (local Docker)
 
+Self-contained stack — no external dependencies needed.  
 Sources: MySQL (`ecommerce` DB) + PostgreSQL (`manage` DB) with seed data.  
-Destination: Azurite (Azure Blob Storage emulator).
+Destination: Azurite (Azure Blob Storage emulator) on port 10000.
 
 ### 1. Start the stack
 
 ```bash
-cd sdp/demo
+cd ingestion/sdp/demo
 docker compose up --build -d
 ```
 
@@ -150,7 +154,8 @@ docker compose up --build -d
 |---|---|
 | `sdp_mysql` | MySQL 8.4 — `ecommerce` DB, 5 tables + seed data |
 | `sdp_postgres` | PostgreSQL 15 — `manage` DB, 5 tables + seed data |
-| `sdp_azurite` | Azure Blob emulator — `bronze` container on host port 10000 |
+| `sdp_azurite` | Azure Blob emulator — `bronze` container, ports 10000 (API) |
+| `sdp_azurite_init` | One-shot: creates `bronze` container in Azurite |
 | `sdp_demo` | Spark 4.1 with hadoop-azure — kept alive for exec |
 
 ### 2. Run pipelines
@@ -166,6 +171,11 @@ docker exec sdp_demo spark-pipelines run \
 ```
 
 Use `dry-run` instead of `run` to validate the plan without writing data.
+
+### 3. Browse output
+
+Connect Azure Storage Explorer to Azurite:
+- **Connection string:** `DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://localhost:10000/dataplatformstrorage;`
 
 ---
 
@@ -237,12 +247,12 @@ configuration:
 
 ---
 
-## Key packages (in Dockerfile.spark)
+## Key packages (in infrastructure/spark/Dockerfile.spark)
 
 | Package | Version | Purpose |
 |---|---|---|
-| `apache/spark` | 4.1.0-python3 | Base image |
-| `pyspark[pipelines]` | 4.1.x | spark-pipelines CLI + @dp.materialized_view |
+| `apache/spark` | 4.1.2-python3 | Base image |
+| `pyspark[pipelines]` | ≥ 4.1.2 | spark-pipelines CLI + @dp.materialized_view |
 | `delta-spark_2.13` | 4.0.0 | Delta Lake for Spark 4.1 |
 | `hadoop-azure` | 3.4.1 | Azure Blob Storage (abfss://) filesystem |
 | `azure-storage` | 8.6.6 | Azure SDK for hadoop-azure |
