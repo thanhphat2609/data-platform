@@ -36,7 +36,7 @@ def dlt_crm_ingestion(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["dlt"],
     group_name="dlt_ingestion",
-    description="Incremental load of GitHub Events, Open-Meteo, Exchange Rates → Azure Blob bronze/dlt/events/",
+    description="Incremental load of USGS Earthquake Events, Open-Meteo, Exchange Rates → Azure Blob bronze/dlt/events/",
 )
 def dlt_events_ingestion(context: OpExecutionContext) -> None:
     import sys

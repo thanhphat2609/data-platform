@@ -2,26 +2,25 @@
 Events ingestion pipeline → Azure Blob bronze/dlt/events/
 
 Sources:
-  - GitHub Events       (incremental by created_at)
-  - Open-Meteo Hourly   (incremental by date, free — no key required)
-  - Exchange Rates      (incremental by date, fallback to frankfurter.app)
+  - USGS Earthquake Events  (incremental by time, free — no key required)
+  - Open-Meteo Hourly       (incremental by date, free — no key required)
+  - Exchange Rates           (incremental by date, fallback to frankfurter.app)
 
 Output path: az://bronze/dlt/events/<stream>/ingestion_date=<date>/<load_id>.<file_id>.parquet
 """
-import os
 from datetime import date, datetime, timedelta
 from typing import Iterator
+import os
 
 import dlt
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_REPO = os.getenv("GITHUB_REPO", "thanhphat2609/data-platform-ingestion")
 OPENMETEO_LAT = float(os.getenv("OPENMETEO_LAT", "10.8231"))
 OPENMETEO_LON = float(os.getenv("OPENMETEO_LON", "106.6297"))
 EXCHANGERATES_API_KEY = os.getenv("EXCHANGERATES_API_KEY", "")
+USGS_MIN_MAGNITUDE = float(os.getenv("USGS_MIN_MAGNITUDE", "1.0"))
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "30"))
 
 
@@ -34,48 +33,50 @@ def _http_session() -> requests.Session:
 
 @dlt.source(name="events")
 def events_source():
-    return [github_events(), openmeteo_hourly(), exchange_rates()]
+    return [earthquake_events(), openmeteo_hourly(), exchange_rates()]
 
 
-@dlt.resource(name="github_events", write_disposition="append")
-def github_events(
-    created_at: dlt.sources.incremental[datetime] = dlt.sources.incremental(
-        "created_at", initial_value="2024-01-01T00:00:00"
+@dlt.resource(name="earthquake_events", write_disposition="append")
+def earthquake_events(
+    time_cursor: dlt.sources.incremental[str] = dlt.sources.incremental(
+        "time", initial_value=str(date.today() - timedelta(days=LOOKBACK_DAYS))
     ),
 ) -> Iterator[dict]:
     session = _http_session()
-    headers = {"Accept": "application/vnd.github+json"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    start_time = str(time_cursor.last_value)[:10]
+    end_time = date.today().isoformat()
 
-    page = 1
-    while True:
-        resp = session.get(
-            f"https://api.github.com/repos/{GITHUB_REPO}/events",
-            headers=headers,
-            params={"per_page": 100, "page": page},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        events = resp.json()
+    resp = session.get(
+        "https://earthquake.usgs.gov/fdsnws/event/1/query",
+        params={
+            "format": "geojson",
+            "starttime": start_time,
+            "endtime": end_time,
+            "minmagnitude": USGS_MIN_MAGNITUDE,
+            "orderby": "time-asc",
+            "limit": 20000,
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
-        if not events:
-            break
-
-        for event in events:
-            yield {
-                "id": event["id"],
-                "type": event["type"],
-                "actor_login": event["actor"]["login"],
-                "repo_name": event["repo"]["name"],
-                "public": event.get("public", True),
-                "created_at": event["created_at"],
-            }
-
-        # GitHub paginates events — stop when we hit older records
-        if len(events) < 100:
-            break
-        page += 1
+    for feature in data.get("features", []):
+        props = feature["properties"]
+        coords = feature["geometry"]["coordinates"]
+        yield {
+            "id": feature["id"],
+            "time": datetime.utcfromtimestamp(props["time"] / 1000).isoformat(),
+            "magnitude": props.get("mag"),
+            "place": props.get("place"),
+            "type": props.get("type"),
+            "longitude": coords[0],
+            "latitude": coords[1],
+            "depth_km": coords[2],
+            "status": props.get("status"),
+            "tsunami": props.get("tsunami"),
+            "significance": props.get("sig"),
+        }
 
 
 @dlt.resource(name="openmeteo_hourly", write_disposition="append")

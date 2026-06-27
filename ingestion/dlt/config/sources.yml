@@ -22,10 +22,11 @@ api:
   pipeline_name: api_ingestion
   dataset_name: api
   sources:
-    github:
-      repo: "thanhphat2609/data-platform-ingestion"
-      streams: ["events"]
-      incremental_cursor: created_at
+    usgs_earthquake:
+      endpoint: "https://earthquake.usgs.gov/fdsnws/event/1/query"
+      min_magnitude: 1.0
+      incremental_cursor: time
+      note: "Free — no API key required"
     openmeteo:
       latitude: 10.8231    # Ho Chi Minh City
       longitude: 106.6297

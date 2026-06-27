@@ -38,12 +38,12 @@ bronze/dlt/crm/products/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
 
 | Stream | Source | Cursor | Disposition |
 |---|---|---|---|
-| `github_events` | GitHub Events API | `created_at` | append |
+| `earthquake_events` | USGS Earthquake API (free, no key) | `time` | append |
 | `openmeteo_hourly` | Open-Meteo (free, no key) | `date` | append |
 | `exchange_rates` | Frankfurter / ExchangeRates API | `date` | append |
 
 ```
-bronze/dlt/events/github_events/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
+bronze/dlt/events/earthquake_events/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
 bronze/dlt/events/openmeteo_hourly/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
 bronze/dlt/events/exchange_rates/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
 ```
@@ -95,15 +95,9 @@ bronze/
     │   ├── customers/ingestion_date=YYYY-MM-DD/
     │   └── products/ingestion_date=YYYY-MM-DD/
     └── api/
-        ├── github_events/ingestion_date=YYYY-MM-DD/
+        ├── earthquake_events/ingestion_date=YYYY-MM-DD/
         ├── openmeteo_hourly/ingestion_date=YYYY-MM-DD/
         └── exchange_rates/ingestion_date=YYYY-MM-DD/
-```
-
-### 4. Optional: GitHub token (higher API rate limit)
-
-```bash
-GITHUB_TOKEN=ghp_... docker compose up --build
 ```
 
 ### Re-running pipelines

@@ -48,7 +48,8 @@ services:
 
   # ─────────────────────────────────────────
   # Pipeline: REST APIs → Azure Blob bronze/
-  # Sources: GitHub Events, Open-Meteo, Exchange Rates
+  # Sources: USGS Earthquake Events, Open-Meteo, Exchange Rates
+  # All sources are free — no API keys required
   # ─────────────────────────────────────────
   dlt-api:
     build:
@@ -59,7 +60,7 @@ services:
     environment:
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      USGS_MIN_MAGNITUDE: ${USGS_MIN_MAGNITUDE:-1.0}
     volumes:
       - dlt_state:/app/.dlt/pipelines
     restart: "no"

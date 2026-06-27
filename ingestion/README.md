@@ -79,7 +79,7 @@ bronze/
 │   │   └── products/
 │   │       └── ingestion_date=YYYY-MM-DD/
 │   └── api/
-│       ├── github_events/
+│       ├── earthquake_events/
 │       │   └── ingestion_date=YYYY-MM-DD/
 │       ├── openmeteo_hourly/
 │       │   └── ingestion_date=YYYY-MM-DD/
