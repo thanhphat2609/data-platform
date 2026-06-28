@@ -38,7 +38,7 @@ api:
       timezone: "Asia/Ho_Chi_Minh"
       lookback_days: 30
     exchangerates:
+      endpoint: "https://api.frankfurter.app"
       base_currency: "USD"
-      targets: ["EUR", "GBP", "JPY", "SGD", "VND", "KRW", "AUD"]
       lookback_days: 30
-      fallback_endpoint: "https://api.frankfurter.app"
+      note: "Free — no API key required"

@@ -5,6 +5,7 @@ Reads all rows on every run (replace disposition — no incremental state needed
 Output path: az://bronze/dlt/crm/<table>/ingestion_date=<date>/<load_id>.<file_id>.parquet
 """
 import os
+from datetime import date
 from typing import Iterator
 
 import dlt
@@ -28,23 +29,26 @@ def crm_source():
 
 @dlt.resource(name="orders", write_disposition="replace")
 def orders() -> Iterator[dict]:
+    today = date.today().isoformat()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM orders ORDER BY id ASC")
-        yield from (dict(row) for row in cur)
+        yield from ({**dict(row), "ingestion_date": today} for row in cur)
 
 
 @dlt.resource(name="customers", write_disposition="replace")
 def customers() -> Iterator[dict]:
+    today = date.today().isoformat()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM customers ORDER BY id ASC")
-        yield from (dict(row) for row in cur)
+        yield from ({**dict(row), "ingestion_date": today} for row in cur)
 
 
 @dlt.resource(name="products", write_disposition="replace")
 def products() -> Iterator[dict]:
+    today = date.today().isoformat()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM products ORDER BY id ASC")
-        yield from (dict(row) for row in cur)
+        yield from ({**dict(row), "ingestion_date": today} for row in cur)
 
 
 if __name__ == "__main__":

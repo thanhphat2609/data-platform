@@ -4,7 +4,7 @@ Events ingestion pipeline → Azure Blob bronze/dlt/events/
 Sources:
   - USGS Earthquake Events  (incremental by time, free — no key required)
   - Open-Meteo Hourly       (incremental by date, free — no key required)
-  - Exchange Rates           (incremental by date, fallback to frankfurter.app)
+  - Exchange Rates           (incremental by date, frankfurter.app — no key required)
 
 Output path: az://bronze/dlt/events/<stream>/ingestion_date=<date>/<load_id>.<file_id>.parquet
 """
@@ -19,7 +19,6 @@ from urllib3.util.retry import Retry
 
 OPENMETEO_LAT = float(os.getenv("OPENMETEO_LAT", "10.8231"))
 OPENMETEO_LON = float(os.getenv("OPENMETEO_LON", "106.6297"))
-EXCHANGERATES_API_KEY = os.getenv("EXCHANGERATES_API_KEY", "")
 USGS_MIN_MAGNITUDE = float(os.getenv("USGS_MIN_MAGNITUDE", "1.0"))
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "30"))
 
@@ -76,6 +75,7 @@ def earthquake_events(
             "status": props.get("status"),
             "tsunami": props.get("tsunami"),
             "significance": props.get("sig"),
+            "ingestion_date": date.today().isoformat(),
         }
 
 
@@ -116,6 +116,7 @@ def openmeteo_hourly(
             "relative_humidity_2m": hourly["relative_humidity_2m"][i],
             "wind_speed_10m": hourly["wind_speed_10m"][i],
             "precipitation": hourly["precipitation"][i],
+            "ingestion_date": date.today().isoformat(),
         }
 
 
@@ -133,13 +134,8 @@ def exchange_rates(
     while current <= today:
         date_str = current.isoformat()
 
-        # Use frankfurter.app as free fallback; override with paid key
-        if EXCHANGERATES_API_KEY:
-            url = f"https://api.exchangeratesapi.io/v1/{date_str}"
-            params = {"access_key": EXCHANGERATES_API_KEY, "base": "USD"}
-        else:
-            url = f"https://api.frankfurter.app/{date_str}"
-            params = {"base": "USD"}
+        url = f"https://api.frankfurter.app/{date_str}"
+        params = {"base": "USD"}
 
         try:
             resp = session.get(url, params=params, timeout=15)
@@ -153,6 +149,7 @@ def exchange_rates(
                     "base": payload.get("base", "USD"),
                     "target": target_currency,
                     "rate": float(rate),
+                    "ingestion_date": date.today().isoformat(),
                 }
         except requests.exceptions.HTTPError:
             pass  # Skip unavailable dates (weekends, holidays)
