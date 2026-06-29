@@ -52,9 +52,24 @@ def products() -> Iterator[dict]:
 
 
 if __name__ == "__main__":
+    from dlt.destinations import filesystem
+
+    account_name = os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME")
+    account_key = os.getenv("DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY")
+    bucket_url = os.getenv("DESTINATION__FILESYSTEM__BUCKET_URL", "az://bronze/dlt")
+
+    # When env vars are present (Docker / CI), inject them directly so dlt's
+    # AzureCredentialsWithoutDefaults resolver doesn't fail to find the key.
+    # When they're absent (local dev), fall back to .dlt/secrets.toml resolution.
+    dest = (
+        filesystem(bucket_url=bucket_url, credentials={"azure_storage_account_name": account_name, "azure_storage_account_key": account_key})
+        if account_name and account_key
+        else filesystem(bucket_url=bucket_url)
+    )
+
     pipeline = dlt.pipeline(
         pipeline_name="crm_ingestion",
-        destination="filesystem",
+        destination=dest,
         dataset_name="crm",
     )
     load_info = pipeline.run(crm_source())

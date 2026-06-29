@@ -42,8 +42,8 @@ The image is the runtime (libraries + pipeline code). No long-running sidecar pr
 
 | Pipeline type | Image | Dagster triggers |
 |--------------|-------|-----------------|
-| dlt CRM | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest pipelines/postgres_pipeline.py` |
-| dlt Events | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest pipelines/api_pipeline.py` |
+| dlt CRM | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest python pipelines/postgres_pipeline.py` |
+| dlt Events | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest python pipelines/api_pipeline.py` |
 | Spark SDP ecommerce | `spark-pipeline:latest` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml` |
 | Spark SDP manage | `spark-pipeline:latest` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml` |
 
@@ -108,7 +108,7 @@ docker run --rm \
   -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
   -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY=<key> \
   -e POSTGRES_CONNECTION_STRING=postgresql://... \
-  dlt-pipeline:latest pipelines/postgres_pipeline.py
+  dlt-pipeline:latest python pipelines/postgres_pipeline.py
 
 # Spark SDP — ecommerce
 docker run --rm \

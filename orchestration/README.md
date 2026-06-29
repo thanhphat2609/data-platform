@@ -28,7 +28,7 @@ orchestration/
 
 ```
 dlt_crm_ingestion       ─┐
-dlt_events_ingestion    ─┤  (docker run dlt-pipeline:latest <script>)
+dlt_events_ingestion    ─┤  (docker run dlt-pipeline:latest python <script>)
                          │
 sdp_ecommerce_ingestion ─┤  (docker run spark-pipeline:latest spark-pipelines run --spec ...)
 sdp_manage_ingestion    ─┘
@@ -47,7 +47,7 @@ sales_raw ──► sales_transformed    (worker-2, queue: worker-2)
 run_docker_pipeline(
     context,
     image="dlt-pipeline:latest",
-    cmd=["pipelines/postgres_pipeline.py"],
+    cmd=["python", "pipelines/postgres_pipeline.py"],
     env_vars={"POSTGRES_CONNECTION_STRING": "..."},
 )
 ```
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 ```python
 @asset(key_prefix=["dlt"], group_name="dlt_ingestion")
 def dlt_my_ingestion(context: AssetExecutionContext) -> None:
-    run_docker_pipeline(context, image=_DLT_IMAGE, cmd=["pipelines/my_pipeline.py"], env_vars=_dlt_env())
+    run_docker_pipeline(context, image=_DLT_IMAGE, cmd=["python", "pipelines/my_pipeline.py"], env_vars=_dlt_env())
 ```
 
 **4. Register** in `jobs/__init__.py`, `schedules/__init__.py`, and `definitions.py`.

@@ -85,16 +85,7 @@ docker compose -f dagster/worker/docker-compose.yml up -d
 # Dagster — single-node demo
 docker compose -f dagster/demo/docker-compose.yml up -d
 
-# Run a pipeline manually (no Dagster)
-docker run --rm \
-  -e POSTGRES_CONNECTION_STRING=postgresql://admin:admin123@localhost:5432/platform \
-  -e DESTINATION__FILESYSTEM__BUCKET_URL=az://bronze/dlt \
-  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
-  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY=<key> \
-  dlt-pipeline:latest pipelines/postgres_pipeline.py
-
-docker run --rm \
-  -e MYSQL_HOST=localhost -e MYSQL_USER=admin -e MYSQL_PASSWORD=admin123 \
-  spark-pipeline:latest \
-  spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+# Run pipelines manually → see ingestion docs
+# ingestion/dlt/README.md  — dlt pipelines (postgres, API events)
+# ingestion/spark/README.md — Spark pipelines
 ```
