@@ -274,3 +274,7 @@ configuration:
 | `azure-storage` | 8.6.6 | Azure SDK for hadoop-azure |
 | `mysql-connector-j` | 8.4.0 | MySQL JDBC driver |
 | `postgresql` | 42.7.3 | PostgreSQL JDBC driver |
+
+
+## Project Demo
+You can watch the full demo of this Spark Declarative Pipeline on YouTube: [Watch here](https://youtu.be/nEDV9MA7LoM)

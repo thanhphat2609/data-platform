@@ -154,3 +154,7 @@ python pipelines/api_pipeline.py
 | `.dlt/secrets.toml` | Credentials — gitignored, never commit |
 | `config/sources.yml` | Human-readable source reference (not loaded by dlt) |
 | `demo/docker-compose.yml` | Source infrastructure only: PostgreSQL with seed data |
+
+
+## Project Demo
+You can watch the full demo of this Data Load Tool on YouTube: [Watch here](https://youtu.be/q5xFxogdmws)

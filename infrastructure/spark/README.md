@@ -34,6 +34,3 @@ docker exec <container> spark-pipelines run --spec /opt/spark/pipeline/manage/pi
 ```
 
 For a local demo stack (Spark + MySQL + PostgreSQL + Azurite), see `ingestion/sdp/README.md`.
-
-## Project Demo
-You can watch the full demo of this Spark Declarative Pipeline on YouTube: [Watch here](https://youtu.be/nEDV9MA7LoM)
