@@ -6,6 +6,3 @@ dlthub_telemetry = false
 [destination.filesystem]
 bucket_url = "az://bronze/dlt"
 layout = "{table_name}/ingestion_date={curr_date}/{load_id}.{file_id}.{ext}"
-
-[pipeline]
-loader_file_format="parquet"

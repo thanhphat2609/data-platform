@@ -175,5 +175,5 @@ if __name__ == "__main__":
         destination=dest,
         dataset_name="events",
     )
-    load_info = pipeline.run(events_source())
+    load_info = pipeline.run(events_source(), loader_file_format="parquet")
     print(load_info)

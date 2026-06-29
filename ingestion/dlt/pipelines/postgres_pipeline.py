@@ -72,5 +72,5 @@ if __name__ == "__main__":
         destination=dest,
         dataset_name="crm",
     )
-    load_info = pipeline.run(crm_source())
+    load_info = pipeline.run(crm_source(), loader_file_format="parquet")
     print(load_info)
