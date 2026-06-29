@@ -5,4 +5,4 @@ dlthub_telemetry = false
 # Filesystem destination → Azure Blob Storage (az:// = adlfs)
 [destination.filesystem]
 bucket_url = "az://bronze/dlt"
-layout = "{schema_name}/{table_name}/ingestion_date={curr_date}/{load_id}.{file_id}"
+layout = "{table_name}/ingestion_date={curr_date}/{load_id}.{file_id}.{ext}"
