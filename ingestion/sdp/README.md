@@ -5,7 +5,7 @@ Batch ingestion from MySQL and PostgreSQL → Azure Blob Storage bronze using **
 YAML-driven spec. Python modules with `@dp.materialized_view`. No custom runner code.
 
 > **Note:** Production Spark runs are triggered by **Dagster** in [`orchestration/`](../../orchestration/README.md).  
-> The Spark image (`Dockerfile.spark`) lives in [`infrastructure/spark/`](../../infrastructure/spark/README.md) — the demo `docker-compose.yml` references it from there.
+> The Spark image (`Dockerfile.spark`) lives in [`infrastructure/spark/`](../../infrastructure/spark/README.md) — build it once and invoke it with `docker run`.
 
 ---
 
@@ -47,7 +47,7 @@ sdp/
 │       ├── pipeline.yml          ← spark-pipelines spec (Azure Blob Storage)
 │       └── bronze_ingestion.py   ← 5 @dp.materialized_view with incremental queries
 └── demo/
-    ├── docker-compose.yml        ← MySQL + PostgreSQL + Azurite + Spark
+    ├── docker-compose.yml        ← MySQL + PostgreSQL + Azurite (source infra only)
     ├── mysql/
     │   └── 01_init.sql           ← DDL + seed data for ecommerce DB (5 tables)
     └── postgres/
@@ -143,34 +143,50 @@ Self-contained stack — no external dependencies needed.
 Sources: MySQL (`ecommerce` DB) + PostgreSQL (`manage` DB) with seed data.  
 Destination: Azurite (Azure Blob Storage emulator) on port 10000.
 
-### 1. Start the stack
+### 1. Build the Spark image
+
+```bash
+# From repo root — pipeline specs are baked into the image
+docker build -f infrastructure/spark/Dockerfile.spark -t spark-pipeline:latest .
+```
+
+### 2. Start source infrastructure
 
 ```bash
 cd ingestion/sdp/demo
-docker compose up --build -d
+docker compose up -d
 ```
 
 | Container | Role |
 |---|---|
 | `sdp_mysql` | MySQL 8.4 — `ecommerce` DB, 5 tables + seed data |
 | `sdp_postgres` | PostgreSQL 15 — `manage` DB, 5 tables + seed data |
-| `sdp_azurite` | Azure Blob emulator — `bronze` container, ports 10000 (API) |
+| `sdp_azurite` | Azure Blob emulator — `bronze` container, port 10000 |
 | `sdp_azurite_init` | One-shot: creates `bronze` container in Azurite |
-| `sdp_demo` | Spark 4.1 with hadoop-azure — kept alive for exec |
 
-### 2. Run pipelines
+### 3. Run pipelines
 
 ```bash
 # MySQL ecommerce → Azurite (5 tables, incremental queries)
-docker exec sdp_demo spark-pipelines run \
-  --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+docker run --rm \
+  --network demo_sdp_network \
+  -e MYSQL_HOST=mysql -e MYSQL_USER=admin -e MYSQL_PASSWORD=admin123 \
+  spark-pipeline:latest \
+  spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
 
 # PostgreSQL manage → Azurite (5 tables, incremental queries)
-docker exec sdp_demo spark-pipelines run \
-  --spec /opt/spark/pipeline/manage/pipeline.yml
+docker run --rm \
+  --network demo_sdp_network \
+  -e POSTGRES_HOST=postgres -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin123 \
+  spark-pipeline:latest \
+  spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
 ```
 
 Use `dry-run` instead of `run` to validate the plan without writing data.
+
+> The `--network demo_sdp_network` flag joins the pipeline container to the same bridge network
+> as the source databases, so it can resolve hostnames `mysql` and `postgres`.
+> Azurite DNS aliases (`dataplatformstrorage.dfs.core.windows.net`) are also on this network.
 
 ### 3. Browse output
 

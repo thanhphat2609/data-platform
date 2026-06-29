@@ -76,7 +76,7 @@ This starts `dlt_postgres` (PostgreSQL 15, seeded with orders / customers / prod
 ```bash
 # CRM full load (PostgreSQL → Azure Blob)
 docker run --rm \
-  --network ingestion_dlt_demo_dlt_network \
+  --network demo_dlt_network \
   -e POSTGRES_CONNECTION_STRING=postgresql://admin:admin123@postgres:5432/platform \
   -e DESTINATION__FILESYSTEM__BUCKET_URL=az://bronze/dlt \
   -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
