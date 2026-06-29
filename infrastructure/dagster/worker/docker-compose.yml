@@ -9,6 +9,10 @@ services:
       DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@${MASTER_VM_IP}:5432/dagster_db
       CELERY_BROKER_URL: redis://${MASTER_VM_IP}:6379/0
       CELERY_RESULT_BACKEND: redis://${MASTER_VM_IP}:6379/0
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   dagster-worker-2:
     build:
@@ -19,3 +23,7 @@ services:
       DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@${MASTER_VM_IP}:5432/dagster_db
       CELERY_BROKER_URL: redis://${MASTER_VM_IP}:6379/0
       CELERY_RESULT_BACKEND: redis://${MASTER_VM_IP}:6379/0
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

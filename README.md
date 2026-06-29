@@ -17,20 +17,37 @@ PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
       │                │              │                │
       ▼                ▼              ▼                ▼
    [ dlt ]          [ dlt ]     [ Spark SDP ]   [ Spark SDP ]
+  container        container     container        container
       │                │              │                │
       └────────────────┴──────────────┴────────────────┘
                                  │
                     ┌────────────▼────────────┐
-                    │    MinIO  (bronze/)      │
+                    │   Azure Blob  (bronze/)  │
                     │   Parquet / Delta Lake   │
                     └────────────┬────────────┘
                                  │
                     ┌────────────▼────────────┐
-                    │       Dagster            │
+                    │         Dagster          │
                     │  schedules · sensors     │
-                    │  software-defined assets │
+                    │  docker run per pipeline │
                     └─────────────────────────┘
 ```
+
+Each pipeline runs as a **short-lived Docker container** triggered by Dagster via `docker run`.
+The image is the runtime (libraries + pipeline code). No long-running sidecar processes.
+
+---
+
+## Execution model
+
+| Pipeline type | Image | Dagster triggers |
+|--------------|-------|-----------------|
+| dlt CRM | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest pipelines/postgres_pipeline.py` |
+| dlt Events | `dlt-pipeline:latest` | `docker run dlt-pipeline:latest pipelines/api_pipeline.py` |
+| Spark SDP ecommerce | `spark-pipeline:latest` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml` |
+| Spark SDP manage | `spark-pipeline:latest` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml` |
+
+Adding a new pipeline = add a script (dlt) or a spec folder (SDP) and rebuild the image. No orchestration code changes needed.
 
 ---
 
@@ -39,27 +56,28 @@ PostgreSQL (CDC)   REST APIs    MySQL (JDBC)   PostgreSQL (JDBC)
 ```
 data-platform/
 │
-├── ingestion/                    ← EL pipelines
+├── ingestion/                    ← EL pipelines (pipeline code only — no orchestration logic)
 │   ├── dlt/                      Python-native CDC + REST APIs
-│   │   └── demo/                 Demo: MinIO + PostgreSQL + dlt runners + seed data
+│   │   └── pipelines/            postgres_pipeline.py, api_pipeline.py (each has __main__)
 │   └── sdp/                      Spark Declarative Pipelines (batch JDBC)
-│       ├── pipelines/            spark-pipelines specs + @dp.materialized_view
-│       └── demo/                 Self-contained demo: MySQL + PostgreSQL + Azurite + Spark
-│           └── Dockerfile.spark  Spark image with Delta + JDBC + Azure JARs
+│       └── pipelines/            spark-pipelines specs + @dp.materialized_view modules
 │
 ├── orchestration/                ← Dagster software-defined assets
-│   ├── assets/                   Asset definitions (sales, sap)
+│   ├── assets/                   Asset definitions (dlt, sdp, sales, sap)
 │   ├── jobs/                     Job wrappers
 │   ├── schedules/                Cron schedules
 │   ├── resources/                IO managers
-│   └── src/                      Business logic
+│   └── src/
+│       ├── docker_runner.py      Shared helper: subprocess docker run + log streaming
+│       ├── sales_processor.py
+│       └── sap_processor.py
 │
-└── infrastructure/               ← Deployment + all Dockerfiles
-    ├── dagster/                  Docker Compose — webserver, daemon, workers
-    │   ├── control/              Master VM (postgres + redis + UI + daemon)
+└── infrastructure/               ← Dockerfiles + Docker Compose configs
+    ├── dagster/                  Dagster image + control/worker/demo Compose files
+    │   ├── control/              Master VM (postgres + redis + webserver + daemon)
     │   └── worker/               Worker VMs (Celery workers)
-    ├── spark/                    Spark 4.1 image (Delta + JDBC + Azure Blob)
-    └── dlt/                      dlt runner image (Python 3.11 + dlt deps)
+    ├── spark/                    Spark 4.1 image (Delta + JDBC + Azure Blob + SDP specs)
+    └── dlt/                      dlt runtime image (Python 3.11 + dlt deps)
 ```
 
 ---
@@ -70,57 +88,59 @@ data-platform/
 
 ```bash
 cp .env.example .env
-# Edit .env — set AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, DAGSTER_POSTGRES_PASSWORD
+# Edit .env — set AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCOUNT_KEY
 ```
 
-### 2. Ingestion — dlt (Docker demo)
+### 2. Build pipeline images (once, or on pipeline changes)
 
 ```bash
-cd ingestion/dlt/demo
-docker compose up --build
+# From repo root
+docker build -f infrastructure/dlt/Dockerfile   -t dlt-pipeline:latest   .
+docker build -f infrastructure/spark/Dockerfile.spark -t spark-pipeline:latest .
 ```
 
-Pipelines exit on completion. Browse results in Azure Storage Explorer at `http://localhost:10000` (Azurite).
+### 3. Run a pipeline manually
 
 ```bash
-# Re-run individual pipelines
-docker compose run --rm dlt-postgres
-docker compose run --rm dlt-api
+# DLT — CRM full load
+docker run --rm \
+  -e DESTINATION__FILESYSTEM__BUCKET_URL=az://bronze/dlt \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY=<key> \
+  -e POSTGRES_CONNECTION_STRING=postgresql://... \
+  dlt-pipeline:latest pipelines/postgres_pipeline.py
+
+# Spark SDP — ecommerce
+docker run --rm \
+  -e MYSQL_HOST=<host> -e MYSQL_USER=admin -e MYSQL_PASSWORD=admin123 \
+  spark-pipeline:latest \
+  spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
 ```
 
-### 3. Ingestion — Spark SDP (Docker demo)
+### 4. Orchestration — Dagster demo (single-node)
 
 ```bash
-cd ingestion/sdp/demo
-docker compose up --build -d
+# Build the Dagster image
+docker build -f infrastructure/dagster/Dockerfile -t dagster:latest .
 
-# Run ecommerce pipeline (MySQL → Azurite)
-docker exec sdp_demo spark-pipelines run \
-  --spec /opt/spark/pipeline/ecommerce/pipeline.yml
-
-# Run manage pipeline (PostgreSQL → Azurite)
-docker exec sdp_demo spark-pipelines run \
-  --spec /opt/spark/pipeline/manage/pipeline.yml
-```
-
-### 4. Orchestration — Dagster (demo, single-node)
-
-```bash
-# Set Azure credentials (used by dlt assets)
+# Set Azure credentials (used by dlt assets at runtime)
 export AZURE_STORAGE_ACCOUNT_NAME=<your-account>
 export AZURE_STORAGE_ACCOUNT_KEY=<your-key>
 
 cd infrastructure/dagster/demo
-docker compose up --build -d
+docker compose up -d
 ```
 
-Open **http://localhost:3000** for the Dagster UI.
+Open **http://localhost:3000** for the Dagster UI. Dagster will trigger pipeline containers
+via `docker run` using the socket mounted at `/var/run/docker.sock`.
 
 > **Production (multi-VM + Celery):**
 > ```bash
 > docker compose -f infrastructure/dagster/control/docker-compose.yml up -d   # master
 > docker compose -f infrastructure/dagster/worker/docker-compose.yml up -d    # workers
 > ```
+> Set `DLT_IMAGE` and `SDP_IMAGE` env vars to point at your registry, e.g.
+> `DLT_IMAGE=myregistry.azurecr.io/dlt-pipeline:v1.2`
 
 ---
 

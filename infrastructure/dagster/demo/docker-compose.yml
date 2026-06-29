@@ -2,7 +2,6 @@ services:
 
   # ─────────────────────────────────────────
   # Destination: Azure Blob Storage (Azurite)
-  # Used by Spark SDP pipelines.
   # Both .blob and .dfs aliases so hadoop-azure
   # ABFS driver resolves to this container.
   # ─────────────────────────────────────────
@@ -66,8 +65,11 @@ services:
   # Dagster — webserver (UI on :3000)
   # Single-node: DefaultRunLauncher (no Celery)
   #
-  # dlt assets  → real Azure (AZURE_STORAGE_*)
-  # SDP assets  → docker exec demo_spark via Docker socket
+  # Pipeline containers are launched via `docker run` using the Docker socket.
+  # DLT:  docker run dlt-pipeline:latest pipelines/postgres_pipeline.py
+  # SDP:  docker run spark-pipeline:latest spark-pipelines run --spec ...
+  # DOCKER_NETWORK ensures pipeline containers join demo_network so they can
+  # reach postgres-platform, mysql-ecommerce, and azurite.
   # ─────────────────────────────────────────
   dagster-webserver:
     build:
@@ -79,13 +81,28 @@ services:
       - "3000:3000"
     environment:
       DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
-      # dlt assets — real Azure Blob Storage
+      # dlt pipeline image
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      # dlt credentials forwarded into dlt container
       DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
       POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
-      # SDP assets — Spark container name for docker exec
-      SPARK_CONTAINER_NAME: demo_spark
+      # SDP pipeline image
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      # SDP credentials forwarded into spark container
+      MYSQL_HOST:         mysql-ecommerce
+      MYSQL_PORT:         "3306"
+      MYSQL_DB:           ecommerce
+      MYSQL_USER:         admin
+      MYSQL_PASSWORD:     admin123
+      POSTGRES_HOST:      postgres-manage
+      POSTGRES_PORT:      "5432"
+      POSTGRES_MANAGE_DB: manage
+      POSTGRES_USER:      admin
+      POSTGRES_PASSWORD:  admin123
+      # Attach pipeline containers to demo_network so they reach sibling services
+      DOCKER_NETWORK: demo_network
     volumes:
       - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -106,11 +123,23 @@ services:
     command: dagster-daemon run
     environment:
       DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
       DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
       POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
-      SPARK_CONTAINER_NAME: demo_spark
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      MYSQL_HOST:         mysql-ecommerce
+      MYSQL_PORT:         "3306"
+      MYSQL_DB:           ecommerce
+      MYSQL_USER:         admin
+      MYSQL_PASSWORD:     admin123
+      POSTGRES_HOST:      postgres-manage
+      POSTGRES_PORT:      "5432"
+      POSTGRES_MANAGE_DB: manage
+      POSTGRES_USER:      admin
+      POSTGRES_PASSWORD:  admin123
+      DOCKER_NETWORK: demo_network
     volumes:
       - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -190,41 +219,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - demo_network
-
-  # ─────────────────────────────────────────
-  # Spark — SDP runner (kept alive for exec)
-  # Dagster SDP assets call docker exec demo_spark
-  # via the Docker socket mounted above.
-  # ─────────────────────────────────────────
-  spark:
-    build:
-      context: ../../..
-      dockerfile: infrastructure/spark/Dockerfile.spark
-    container_name: demo_spark
-    environment:
-      MYSQL_HOST:          mysql-ecommerce
-      MYSQL_PORT:          "3306"
-      MYSQL_DB:            ecommerce
-      MYSQL_USER:          admin
-      MYSQL_PASSWORD:      admin123
-      POSTGRES_HOST:       postgres-manage
-      POSTGRES_PORT:       "5432"
-      POSTGRES_MANAGE_DB:  manage
-      POSTGRES_USER:       admin
-      POSTGRES_PASSWORD:   admin123
-    ports:
-      - "4040:4040"
-    volumes:
-      - ../../../ingestion/sdp/pipelines:/opt/spark/pipeline
-    depends_on:
-      azurite-init:
-        condition: service_completed_successfully
-      mysql-ecommerce:
-        condition: service_healthy
-      postgres-manage:
-        condition: service_healthy
     networks:
       - demo_network
 

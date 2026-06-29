@@ -37,6 +37,11 @@ services:
       DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # Pipeline images — override to pull from a registry in production
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +57,10 @@ services:
       DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

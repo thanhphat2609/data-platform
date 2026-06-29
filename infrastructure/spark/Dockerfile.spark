@@ -28,7 +28,10 @@ RUN curl -fL -o /opt/spark/jars/delta-spark_2.13-4.0.0.jar \
 
 ENV PYTHONPATH=/usr/local/lib/python3.10/dist-packages:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
 
-USER spark
+# Bake all pipeline specs into the image — runtime only, no dispatcher.
+# Pass the spec path as the command:
+#   docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+#   docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml
+COPY ingestion/sdp/pipelines /opt/spark/pipeline
 
-# Keep the container alive — trigger pipelines via: docker exec sdp_demo spark-pipelines run ...
-CMD ["tail", "-f", "/dev/null"]
+USER spark

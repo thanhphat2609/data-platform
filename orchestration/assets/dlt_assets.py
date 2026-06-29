@@ -1,20 +1,21 @@
 import os
 
-import dlt
-from dagster import OpExecutionContext, asset
+from dagster import AssetExecutionContext, asset
 
-_POSTGRES_CONN = os.getenv(
-    "POSTGRES_CONNECTION_STRING",
-    "postgresql://admin:admin123@postgres-platform:5432/platform",
-)
+from src.docker_runner import run_docker_pipeline
+
+_DLT_IMAGE = os.getenv("DLT_IMAGE", "dlt-pipeline:latest")
 
 
-def _pipeline(name: str, dataset: str) -> dlt.Pipeline:
-    return dlt.pipeline(
-        pipeline_name=name,
-        destination="filesystem",
-        dataset_name=dataset,
-    )
+def _dlt_env() -> dict[str, str]:
+    """Forward dlt credential env vars from the Dagster process into the container."""
+    keys = [
+        "DESTINATION__FILESYSTEM__BUCKET_URL",
+        "DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME",
+        "DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY",
+        "POSTGRES_CONNECTION_STRING",
+    ]
+    return {k: v for k in keys if (v := os.getenv(k))}
 
 
 @asset(
@@ -22,15 +23,13 @@ def _pipeline(name: str, dataset: str) -> dlt.Pipeline:
     group_name="dlt_ingestion",
     description="Full load of orders, customers, products from CRM (platform DB) → Azure Blob bronze/dlt/crm/",
 )
-def dlt_crm_ingestion(context: OpExecutionContext) -> None:
-    import sys
-    sys.path.insert(0, "/opt/dagster/app/ingestion/dlt")
-    from pipelines.postgres_pipeline import crm_source
-
-    os.environ.setdefault("POSTGRES_CONNECTION_STRING", _POSTGRES_CONN)
-    pipeline = _pipeline("crm_ingestion", "crm")
-    info = pipeline.run(crm_source())
-    context.log.info(str(info))
+def dlt_crm_ingestion(context: AssetExecutionContext) -> None:
+    run_docker_pipeline(
+        context,
+        image=_DLT_IMAGE,
+        cmd=["python", "pipelines/postgres_pipeline.py"],
+        env_vars=_dlt_env(),
+    )
 
 
 @asset(
@@ -38,11 +37,10 @@ def dlt_crm_ingestion(context: OpExecutionContext) -> None:
     group_name="dlt_ingestion",
     description="Incremental load of USGS Earthquake Events, Open-Meteo, Exchange Rates → Azure Blob bronze/dlt/events/",
 )
-def dlt_events_ingestion(context: OpExecutionContext) -> None:
-    import sys
-    sys.path.insert(0, "/opt/dagster/app/ingestion/dlt")
-    from pipelines.api_pipeline import events_source
-
-    pipeline = _pipeline("events_ingestion", "events")
-    info = pipeline.run(events_source())
-    context.log.info(str(info))
+def dlt_events_ingestion(context: AssetExecutionContext) -> None:
+    run_docker_pipeline(
+        context,
+        image=_DLT_IMAGE,
+        cmd=["python", "pipelines/api_pipeline.py"],
+        env_vars=_dlt_env(),
+    )

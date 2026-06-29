@@ -11,7 +11,7 @@ Python-native pipelines for sources that need **incremental state tracking**: Po
 | Schema inference | Auto-detected, evolved across runs |
 | Incremental state | Persisted per-resource cursor in `.dlt/pipelines/` |
 | Write disposition | `replace` (full load) or `append` (immutable events) |
-| Destination | MinIO via S3-compatible filesystem destination |
+| Destination | Azure Blob Storage via filesystem destination (adlfs) |
 | Credentials | `.dlt/secrets.toml` or env vars (`POSTGRES_CONNECTION_STRING`, etc.) |
 
 ---
@@ -52,75 +52,73 @@ bronze/dlt/events/exchange_rates/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.p
 
 ## Demo (Docker — local run)
 
-Self-contained stack — no external dependencies needed.  
-Source: PostgreSQL `platform` DB with seed data.  
-Destination: MinIO (S3-compatible) on ports 9000/9001.
+The demo compose starts **source infrastructure only** (PostgreSQL with seed data).  
+Pipelines are run as one-shot `docker run` commands against the pre-built image.
 
-### 1. Start the stack
+### 1. Build the dlt image
+
+```bash
+# From repo root
+docker build -f infrastructure/dlt/Dockerfile -t dlt-pipeline:latest .
+```
+
+### 2. Start source infrastructure
 
 ```bash
 cd ingestion/dlt/demo
-docker compose up --build
+docker compose up -d
 ```
 
-| Container | Role |
-|---|---|
-| `dlt_minio` | MinIO — S3-compatible `bronze/` bucket (console: localhost:9001) |
-| `dlt_minio_init` | One-shot: creates `bronze` bucket in MinIO |
-| `dlt_postgres` | PostgreSQL 15 — `platform` DB with seed data (orders, customers, products) |
-| `dlt_postgres_pipeline` | Runs `postgres_pipeline.py` → exits on completion |
-| `dlt_api_pipeline` | Runs `api_pipeline.py` → exits on completion |
+This starts `dlt_postgres` (PostgreSQL 15, seeded with orders / customers / products).
 
-Both pipeline containers exit with code 0 on success.
-
-### 2. Check pipeline output
+### 3. Run pipelines
 
 ```bash
-# View logs for each pipeline
-docker compose logs dlt-postgres
-docker compose logs dlt-api
+# CRM full load (PostgreSQL → Azure Blob)
+docker run --rm \
+  --network ingestion_dlt_demo_dlt_network \
+  -e POSTGRES_CONNECTION_STRING=postgresql://admin:admin123@postgres:5432/platform \
+  -e DESTINATION__FILESYSTEM__BUCKET_URL=az://bronze/dlt \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY=<key> \
+  dlt-pipeline:latest python pipelines/postgres_pipeline.py
+
+# Events incremental load (REST APIs → Azure Blob)
+docker run --rm \
+  -e DESTINATION__FILESYSTEM__BUCKET_URL=az://bronze/dlt \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME=<account> \
+  -e DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY=<key> \
+  dlt-pipeline:latest python pipelines/api_pipeline.py
 ```
 
-### 3. Browse output in Azurite
+> The `--network` flag connects the dlt container to the same bridge network as `dlt_postgres`
+> so it can resolve the hostname `postgres`. The events pipeline hits public APIs — no network flag needed.
 
-Connect Azure Storage Explorer to Azurite:
-- **Connection string:** `DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://localhost:10000/dataplatformstrorage;`
+### 4. Browse output
 
-Data lands in the `bronze` container (Hive-partitioned by `ingestion_date`):
+Connect Azure Storage Explorer to your storage account (or Azurite) and navigate to the `bronze` container:
+
 ```
 bronze/
 └── dlt/
-    ├── platform/
-    │   ├── orders/ingestion_date=YYYY-MM-DD/<load_id>.<file_id>.parquet
+    ├── crm/
+    │   ├── orders/ingestion_date=YYYY-MM-DD/
     │   ├── customers/ingestion_date=YYYY-MM-DD/
     │   └── products/ingestion_date=YYYY-MM-DD/
-    └── api/
+    └── events/
         ├── earthquake_events/ingestion_date=YYYY-MM-DD/
         ├── openmeteo_hourly/ingestion_date=YYYY-MM-DD/
         └── exchange_rates/ingestion_date=YYYY-MM-DD/
 ```
-
-### Re-running pipelines
-
-```bash
-cd ingestion/dlt/demo
-
-# Re-run after initial `docker compose up`
-docker compose run --rm dlt-postgres
-docker compose run --rm dlt-api
-```
-
-Incremental state is persisted in the `dlt_state` Docker volume — re-runs fetch only new data from the last cursor position.
 
 ---
 
 ## Setup (without Docker)
 
 ```bash
-cd dlt
+cd ingestion/dlt
 pip install -r requirements.txt
 
-# Copy and fill secrets
 cp .dlt/secrets.toml.example .dlt/secrets.toml
 ```
 
@@ -129,19 +127,9 @@ Edit `.dlt/secrets.toml`:
 [sources.postgres]
 connection_string = "postgresql://admin:admin123@localhost:5432/platform"
 
-# Production: real Azure Blob Storage
 [destination.filesystem.credentials]
 azure_storage_account_name = "<your-storage-account>"
 azure_storage_account_key  = "<your-account-key>"
-```
-
-For local Azurite, set this env var instead (adlfs picks it up automatically):
-```bash
-export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;\
-  AccountName=dataplatformstrorage;\
-  AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;\
-  BlobEndpoint=http://localhost:10000/dataplatformstrorage;"
-export POSTGRES_CONNECTION_STRING="postgresql://admin:admin123@localhost:5432/platform"
 ```
 
 ---
@@ -152,7 +140,7 @@ export POSTGRES_CONNECTION_STRING="postgresql://admin:admin123@localhost:5432/pl
 # PostgreSQL full load
 python pipelines/postgres_pipeline.py
 
-# REST APIs (incremental from last date)
+# REST APIs (incremental from last cursor)
 python pipelines/api_pipeline.py
 ```
 
@@ -165,4 +153,4 @@ python pipelines/api_pipeline.py
 | `.dlt/config.toml` | Non-sensitive config: `bucket_url`, `log_level` |
 | `.dlt/secrets.toml` | Credentials — gitignored, never commit |
 | `config/sources.yml` | Human-readable source reference (not loaded by dlt) |
-| `demo/docker-compose.yml` | Full demo stack: MinIO + PostgreSQL + dlt runners |
+| `demo/docker-compose.yml` | Source infrastructure only: PostgreSQL with seed data |

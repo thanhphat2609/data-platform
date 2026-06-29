@@ -13,10 +13,3 @@ psycopg2-binary           # PostgreSQL Python driver
 azure-storage-blob        # Azure SDK for blob read/write in IO manager
 pandas                    # DataFrame serialisation
 pyarrow                   # Parquet engine used by pandas
-
-# ── dlt ingestion assets ──────────────────────────────────────────────────────
-dlt[filesystem]==0.5.4    # dlt core + filesystem destination (includes adlfs for Azure)
-requests                  # HTTP client used by api_pipeline
-
-# ── SDP ingestion assets ──────────────────────────────────────────────────────
-docker                    # Docker Python SDK — used to exec spark-pipelines in Spark container
