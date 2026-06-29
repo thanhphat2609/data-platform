@@ -24,10 +24,15 @@ fs = adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_ke
 print(f"Scanning {bucket_url} ...\n")
 
 entries = fs.glob(f"{base_path}/**")
-files   = [e for e in entries if not fs.isdir(e)]
+files   = [
+    e for e in entries
+    if not fs.isdir(e)
+    and "/_dlt_" not in e   # skip dlt internal state tables
+    and fs.info(e)["size"] > 0
+]
 
 if not files:
-    print("No files found.")
+    print("No data files found.")
     raise SystemExit(0)
 
 for path in sorted(files):
