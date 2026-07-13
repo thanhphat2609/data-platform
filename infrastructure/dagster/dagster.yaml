@@ -3,16 +3,24 @@ storage:
     postgres_url:
       env: DAGSTER_POSTGRES_URL
 
+execution:
+  config:
+    celery:
+      broker:
+        env: CELERY_BROKER_URL
+      backend:
+        env: CELERY_RESULT_BACKEND
+
 compute_logs:
   module: dagster_azure.blob.compute_log_manager
   class: AzureBlobComputeLogManager
   config:
     storage_account:
-      env: AZURE_STORAGE_ACCOUNT
+      env: AZURE_STORAGE_ACCOUNT_NAME
     container: dagster-logs
     prefix: compute-logs
     access_key_or_sas_token:
-      env: AZURE_STORAGE_KEY
+      env: AZURE_STORAGE_ACCOUNT_KEY
 
 
 # ── Local fallback — uncomment and comment out the blocks above for local dev ──

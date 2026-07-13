@@ -1,71 +1,126 @@
+# PROD — Control Plane
+#
+# Deploy this on the control VM. It runs the Dagster UI, scheduler daemon, Redis
+# broker, and metadata database. Workers are NOT here — they deploy separately
+# on their own VMs using docker-compose-worker1.yml and docker-compose-worker2.yml.
+#
+# Source databases are external managed services; no containers for them here.
+#
+# After starting this stack, set DAGSTER_POSTGRES_URL and CELERY_BROKER_URL on
+# each worker VM so workers can connect back to this control plane.
+#
+# Usage (from repo root):
+#   docker compose -f infrastructure/dagster/control/docker-compose.yml --env-file infrastructure/dagster/control/.env up -d
+
 services:
 
-  postgres:
+  # ═════════════════════════════════════════
+  # Dagster metadata database
+  # ═════════════════════════════════════════
+
+  dagster-db:
     image: postgres:15-alpine
+    container_name: ctrl_dagster_db
     environment:
-      POSTGRES_DB: dagster_db
-      POSTGRES_USER: dagster
-      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:-dagster}
+      POSTGRES_DB:       dagster
+      POSTGRES_USER:     dagster
+      POSTGRES_PASSWORD: ${DAGSTER_DB_PASSWORD:-dagster}
     ports:
+      # Expose to worker VMs — set DAGSTER_POSTGRES_URL on each worker to
+      # postgresql://dagster:<password>@<this-vm-ip>:5432/dagster
       - "5432:5432"
     volumes:
-      - dagster_postgres_data:/var/lib/postgresql/data
+      - dagster_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dagster"]
+      test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - prod_network
+
+  # ═════════════════════════════════════════
+  # Redis — Celery broker + result backend
+  # ═════════════════════════════════════════
 
   redis:
     image: redis:7-alpine
+    container_name: ctrl_dagster_redis
     ports:
+      # Expose to worker VMs — set CELERY_BROKER_URL on each worker to
+      # redis://<this-vm-ip>:6379/0
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 3s
+      retries: 5
+    networks:
+      - prod_network
+
+  # ═════════════════════════════════════════
+  # Dagster — webserver (UI on :3000)
+  # ═════════════════════════════════════════
 
   dagster-webserver:
     build:
-      context: ../../../
+      context: ../../..
       dockerfile: infrastructure/dagster/Dockerfile
+    container_name: ctrl_dagster_webserver
     command: dagster-webserver -h 0.0.0.0 -p 3000
     ports:
       - "3000:3000"
     environment:
-      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
-      CELERY_BROKER_URL: redis://redis:6379/0
+      # Metadata storage — points to dagster-db on this VM
+      DAGSTER_POSTGRES_URL:  postgresql://dagster:${DAGSTER_DB_PASSWORD:-dagster}@dagster-db:5432/dagster
+      # Celery — webserver reads run status from broker/backend
+      CELERY_BROKER_URL:     redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
-      # Pipeline images — override to pull from a registry in production
-      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
-      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      # Azure Blob — compute log storage (referenced in ../dagster.yaml)
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared prod dagster.yaml: PostgreSQL storage + Celery executor + Azure Blob logs
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
     depends_on:
-      postgres:
+      dagster-db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - prod_network
+
+  # ═════════════════════════════════════════
+  # Dagster — daemon (scheduler + sensor runner)
+  # ═════════════════════════════════════════
 
   dagster-daemon:
     build:
-      context: ../../../
+      context: ../../..
       dockerfile: infrastructure/dagster/Dockerfile
+    container_name: ctrl_dagster_daemon
     command: dagster-daemon run
     environment:
-      DAGSTER_POSTGRES_URL: postgresql://dagster:${DAGSTER_POSTGRES_PASSWORD:-dagster}@postgres:5432/dagster_db
-      CELERY_BROKER_URL: redis://redis:6379/0
+      # Metadata storage
+      DAGSTER_POSTGRES_URL:  postgresql://dagster:${DAGSTER_DB_PASSWORD:-dagster}@dagster-db:5432/dagster
+      # Celery — daemon submits scheduled runs to the broker
+      CELERY_BROKER_URL:     redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
-      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
-      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
     depends_on:
-      postgres:
+      dagster-db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - prod_network
 
 volumes:
-  dagster_postgres_data:
+  dagster_db_data:
+
+networks:
+  prod_network:
+    driver: bridge

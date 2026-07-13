@@ -14,7 +14,7 @@ from psycopg2.extras import RealDictCursor
 
 _CONN_STR = os.getenv(
     "POSTGRES_CONNECTION_STRING",
-    "postgresql://admin:admin123@localhost:5432/platform",
+    "postgresql://admin:admin123@localhost:5432/crm",
 )
 
 

@@ -1,0 +1,69 @@
+# PROD — Worker VM 1 (dlt pipelines)
+#
+# Deploy this on a dedicated Worker VM 1. This worker subscribes exclusively to
+# queue "worker-1" and executes dlt pipeline ops:
+#   - dlt_crm_ingestion  (PostgreSQL CRM → Azure Blob bronze/dlt/crm/)
+#   - dlt_api_ingestion  (REST APIs      → Azure Blob bronze/dlt/events/)
+#
+# Prerequisites on this VM:
+#   - Docker Engine with /var/run/docker.sock accessible
+#   - dlt-pipeline:latest image available locally
+#     Build:  docker build -t dlt-pipeline:latest -f infrastructure/dlt/Dockerfile .
+#   - .env file (copy from .env.worker1.demo and fill in control VM addresses)
+#
+# Start the control plane first (infrastructure/dagster/control/docker-compose.yml),
+# then open firewall/NSG ports 5432 and 6379 from this worker VM to the control VM.
+#
+# Usage (from repo root):
+#   docker compose -f infrastructure/dagster/worker/docker-compose-worker1.yml \
+#                  --env-file infrastructure/dagster/worker/.env.worker1 up -d
+
+services:
+
+  # ─────────────────────────────────────────
+  # Celery worker-1 — dlt pipelines
+  #
+  # Subscribes to queue "worker-1". Only picks up ops tagged with:
+  #   op_tags={"dagster-celery/queue": "worker-1"}
+  #
+  # Connects to the control VM's Redis (CELERY_BROKER_URL) to receive tasks
+  # and to the control VM's PostgreSQL (DAGSTER_POSTGRES_URL) for run metadata.
+  # Spawns ephemeral dlt containers via Docker-in-Docker for each pipeline run.
+  #
+  # DOCKER_NETWORK is NOT set: spawned dlt containers reach source databases by
+  # their real hostname/IP — no sibling Docker containers on this VM.
+  # ─────────────────────────────────────────
+  dagster-worker-1:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: worker1_dagster_worker
+    command: dagster-celery worker start -A dagster_celery.app -q worker-1 --loglevel=info
+    environment:
+      # ── Control plane connection ────────────────────────────────────────────
+      # Set DAGSTER_POSTGRES_URL=postgresql://dagster:<pw>@<ctrl-vm-ip>:5432/dagster_db
+      # Set CELERY_BROKER_URL=redis://<ctrl-vm-ip>:6379/0
+      # Set CELERY_RESULT_BACKEND=redis://<ctrl-vm-ip>:6379/0
+      DAGSTER_POSTGRES_URL:  ${DAGSTER_POSTGRES_URL}
+      CELERY_BROKER_URL:     ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+
+      # ── dlt pipeline image ──────────────────────────────────────────────────
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+
+      # ── Azure Blob — dlt destination ───────────────────────────────────────
+      DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+
+      # ── Azure Blob — Dagster compute logs (referenced in ../dagster.yaml) ──
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+
+      # ── dlt CRM source — real managed PostgreSQL ───────────────────────────
+      POSTGRES_CONNECTION_STRING: ${POSTGRES_CONNECTION_STRING}
+    volumes:
+      # Shared prod dagster.yaml: PostgreSQL storage + Celery executor + Azure Blob logs
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      # Docker socket — allows this worker to spawn dlt pipeline containers
+      - /var/run/docker.sock:/var/run/docker.sock

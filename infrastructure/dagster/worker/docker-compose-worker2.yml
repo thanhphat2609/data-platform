@@ -1,0 +1,76 @@
+# PROD — Worker VM 2 (SDP / Spark pipelines)
+#
+# Deploy this on a dedicated Worker VM 2. This worker subscribes exclusively to
+# queue "worker-2" and executes Spark SDP pipeline ops:
+#   - sdp_ecommerce_ingestion  (MySQL ecommerce    → Azure Blob bronze/sdp/ecommerce/)
+#   - sdp_manage_ingestion     (PostgreSQL manage  → Azure Blob bronze/sdp/manage/)
+#
+# Prerequisites on this VM:
+#   - Docker Engine with /var/run/docker.sock accessible
+#   - spark-pipeline:latest image available locally (build takes ~5 min)
+#     Build:  docker build -t spark-pipeline:latest -f infrastructure/spark/Dockerfile.spark .
+#   - At least 6 GB RAM available for Spark containers (~3–4 GB per run)
+#   - .env file (copy from .env.worker2.demo and fill in control VM addresses)
+#
+# Start the control plane first (infrastructure/dagster/control/docker-compose.yml),
+# then open firewall/NSG ports 5432 and 6379 from this worker VM to the control VM.
+#
+# Usage (from repo root):
+#   docker compose -f infrastructure/dagster/worker/docker-compose-worker2.yml \
+#                  --env-file infrastructure/dagster/worker/.env.worker2 up -d
+
+services:
+
+  # ─────────────────────────────────────────
+  # Celery worker-2 — SDP / Spark pipelines
+  #
+  # Subscribes to queue "worker-2". Only picks up ops tagged with:
+  #   op_tags={"dagster-celery/queue": "worker-2"}
+  #
+  # Connects to the control VM's Redis (CELERY_BROKER_URL) to receive tasks
+  # and to the control VM's PostgreSQL (DAGSTER_POSTGRES_URL) for run metadata.
+  # Spawns ephemeral Spark containers via Docker-in-Docker for each pipeline run.
+  #
+  # DOCKER_NETWORK is NOT set: spawned Spark containers reach source databases by
+  # their real hostname/IP — no sibling Docker containers on this VM.
+  # ─────────────────────────────────────────
+  dagster-worker-2:
+    build:
+      context: ../../../
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: worker2_dagster_worker
+    command: dagster-celery worker start -A dagster_celery.app -q worker-2 --loglevel=info
+    environment:
+      # ── Control plane connection ────────────────────────────────────────────
+      # Set DAGSTER_POSTGRES_URL=postgresql://dagster:<pw>@<ctrl-vm-ip>:5432/dagster_db
+      # Set CELERY_BROKER_URL=redis://<ctrl-vm-ip>:6379/0
+      # Set CELERY_RESULT_BACKEND=redis://<ctrl-vm-ip>:6379/0
+      DAGSTER_POSTGRES_URL:  ${DAGSTER_POSTGRES_URL}
+      CELERY_BROKER_URL:     ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+
+      # ── SDP pipeline image ──────────────────────────────────────────────────
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+
+      # ── Azure Blob — SDP destination + Dagster compute logs ───────────────
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+
+      # ── SDP ecommerce source — real managed MySQL ───────────────────────────
+      MYSQL_HOST:     ${MYSQL_HOST}
+      MYSQL_PORT:     ${MYSQL_PORT:-3306}
+      MYSQL_DB:       ${MYSQL_DB:-ecommerce}
+      MYSQL_USER:     ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+      # ── SDP manage source — real managed PostgreSQL ─────────────────────────
+      POSTGRES_HOST:      ${POSTGRES_HOST}
+      POSTGRES_PORT:      ${POSTGRES_PORT:-5432}
+      POSTGRES_MANAGE_DB: ${POSTGRES_MANAGE_DB:-manage}
+      POSTGRES_USER:      ${POSTGRES_USER}
+      POSTGRES_PASSWORD:  ${POSTGRES_PASSWORD}
+    volumes:
+      # Shared prod dagster.yaml: PostgreSQL storage + Celery executor + Azure Blob logs
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      # Docker socket — allows this worker to spawn Spark pipeline containers
+      - /var/run/docker.sock:/var/run/docker.sock

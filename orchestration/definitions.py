@@ -1,25 +1,24 @@
 from dagster import Definitions
 
-from assets import dlt, sales, sap, sdp
-from jobs import dlt_ingestion_job, sales_job, sap_job, sdp_ingestion_job
-from resources import blob_io_manager
-from schedules import (
-    daily_dlt_schedule,
-    daily_sales_schedule,
-    daily_sap_schedule,
-    daily_sdp_schedule,
-)
+from pipelines import dlt_api, dlt_crm, sdp_ecommerce, sdp_manage
 
 defs = Definitions(
-    assets=[*sales, *sap, *dlt, *sdp],
-    jobs=[sales_job, sap_job, dlt_ingestion_job, sdp_ingestion_job],
-    schedules=[
-        daily_sales_schedule,
-        daily_sap_schedule,
-        daily_dlt_schedule,
-        daily_sdp_schedule,
+    assets=[
+        dlt_crm.dlt_crm_ingestion,
+        dlt_api.dlt_api_ingestion,
+        sdp_ecommerce.sdp_ecommerce_ingestion,
+        sdp_manage.sdp_manage_ingestion,
     ],
-    resources={
-        "io_manager": blob_io_manager,
-    },
+    jobs=[
+        dlt_crm.job,
+        dlt_api.job,
+        sdp_ecommerce.job,
+        sdp_manage.job,
+    ],
+    schedules=[
+        dlt_crm.schedule,
+        dlt_api.schedule,
+        sdp_ecommerce.schedule,
+        sdp_manage.schedule,
+    ],
 )

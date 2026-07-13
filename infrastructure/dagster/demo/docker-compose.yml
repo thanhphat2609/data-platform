@@ -1,47 +1,22 @@
+# NON-PROD — Single-VM demo stack
+#
+# Everything runs on ONE machine. Workers are Docker containers that simulate
+# separate VMs — Celery routing is real, hardware isolation is not.
+# DOCKER_NETWORK=demo_network lets spawned pipeline containers reach the source
+# DBs that live in the same Docker network on this VM.
+#
+# For real multi-VM deployment see:
+#   docker-compose-prod.yml      — control plane (webserver + daemon + Redis + DB)
+#   docker-compose-worker1.yml   — deploy to Worker VM 1 (dlt queue)
+#   docker-compose-worker2.yml   — deploy to Worker VM 2 (SDP queue)
+
 services:
 
-  # ─────────────────────────────────────────
-  # Destination: Azure Blob Storage (Azurite)
-  # Both .blob and .dfs aliases so hadoop-azure
-  # ABFS driver resolves to this container.
-  # ─────────────────────────────────────────
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
-    container_name: demo_azurite
-    command: azurite-blob --blobHost 0.0.0.0 --blobPort 80
-    ports:
-      - "10000:80"
-    volumes:
-      - azurite_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-    networks:
-      demo_network:
-        aliases:
-          - dataplatformstrorage.blob.core.windows.net
-          - dataplatformstrorage.dfs.core.windows.net
+  # ═════════════════════════════════════════
+  # Dagster services
+  # ═════════════════════════════════════════
 
-  azurite-init:
-    image: mcr.microsoft.com/azure-cli:latest
-    container_name: demo_azurite_init
-    depends_on:
-      azurite:
-        condition: service_healthy
-    command: >
-      az storage container create
-        --name bronze
-        --connection-string
-        "DefaultEndpointsProtocol=http;AccountName=dataplatformstrorage;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMw==;BlobEndpoint=http://azurite/dataplatformstrorage;"
-    restart: "no"
-    networks:
-      - demo_network
-
-  # ─────────────────────────────────────────
   # Dagster metadata database
-  # ─────────────────────────────────────────
   dagster-db:
     image: postgres:15-alpine
     container_name: demo_dagster_db
@@ -61,16 +36,7 @@ services:
     networks:
       - demo_network
 
-  # ─────────────────────────────────────────
   # Dagster — webserver (UI on :3000)
-  # Single-node: DefaultRunLauncher (no Celery)
-  #
-  # Pipeline containers are launched via `docker run` using the Docker socket.
-  # DLT:  docker run dlt-pipeline:latest pipelines/postgres_pipeline.py
-  # SDP:  docker run spark-pipeline:latest spark-pipelines run --spec ...
-  # DOCKER_NETWORK ensures pipeline containers join demo_network so they can
-  # reach postgres-platform, mysql-ecommerce, and azurite.
-  # ─────────────────────────────────────────
   dagster-webserver:
     build:
       context: ../../..
@@ -80,14 +46,16 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      DAGSTER_POSTGRES_URL:  postgresql://dagster:dagster@dagster-db:5432/dagster
+      CELERY_BROKER_URL:     redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       # dlt pipeline image
       DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
       # dlt credentials forwarded into dlt container
       DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
-      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-crm:5432/crm
       # SDP pipeline image
       SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
       # SDP credentials forwarded into spark container
@@ -101,20 +69,22 @@ services:
       POSTGRES_MANAGE_DB: manage
       POSTGRES_USER:      admin
       POSTGRES_PASSWORD:  admin123
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
       # Attach pipeline containers to demo_network so they reach sibling services
       DOCKER_NETWORK: demo_network
     volumes:
-      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       dagster-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - demo_network
 
-  # ─────────────────────────────────────────
   # Dagster — daemon (scheduler + sensor)
-  # ─────────────────────────────────────────
   dagster-daemon:
     build:
       context: ../../..
@@ -122,12 +92,14 @@ services:
     container_name: demo_dagster_daemon
     command: dagster-daemon run
     environment:
-      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      DAGSTER_POSTGRES_URL:  postgresql://dagster:dagster@dagster-db:5432/dagster
+      CELERY_BROKER_URL:     redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
       DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
-      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-platform:5432/platform
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-crm:5432/crm
       SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
       MYSQL_HOST:         mysql-ecommerce
       MYSQL_PORT:         "3306"
@@ -139,44 +111,145 @@ services:
       POSTGRES_MANAGE_DB: manage
       POSTGRES_USER:      admin
       POSTGRES_PASSWORD:  admin123
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
       DOCKER_NETWORK: demo_network
     volumes:
-      - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       dagster-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - demo_network
 
   # ─────────────────────────────────────────
-  # Source: PostgreSQL — dlt platform DB
-  # Tables: orders, customers, products
+  # Redis — Celery broker + result backend
   # ─────────────────────────────────────────
-  postgres-platform:
+  redis:
+    image: redis:7-alpine
+    container_name: demo_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Celery worker-1 — dlt pipelines (dlt_crm, dlt_api)
+  # Subscribes to queue "worker-1". Only receives ops tagged with
+  # op_tags={"dagster-celery/queue": "worker-1"}.
+  # In production this would run on a dedicated VM via docker-compose-worker1.yml.
+  # ─────────────────────────────────────────
+  dagster-worker-1:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: demo_dagster_worker_1
+    command: dagster-celery worker start -A dagster_celery.app -q worker-1 --loglevel=info
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      CELERY_BROKER_URL:    redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      POSTGRES_CONNECTION_STRING: postgresql://admin:admin123@postgres-crm:5432/crm
+      # Azure Blob — Dagster compute logs (referenced in ../dagster.yaml)
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      DOCKER_NETWORK: demo_network
+    volumes:
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      dagster-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - demo_network
+
+  # ─────────────────────────────────────────
+  # Celery worker-2 — SDP pipelines (sdp_ecommerce, sdp_manage)
+  # Subscribes to queue "worker-2". Only receives ops tagged with
+  # op_tags={"dagster-celery/queue": "worker-2"}.
+  # In production this would run on a dedicated VM via docker-compose-worker2.yml.
+  # ─────────────────────────────────────────
+  dagster-worker-2:
+    build:
+      context: ../../..
+      dockerfile: infrastructure/dagster/Dockerfile
+    container_name: demo_dagster_worker_2
+    command: dagster-celery worker start -A dagster_celery.app -q worker-2 --loglevel=info
+    environment:
+      DAGSTER_POSTGRES_URL: postgresql://dagster:dagster@dagster-db:5432/dagster
+      CELERY_BROKER_URL:    redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      MYSQL_HOST:         mysql-ecommerce
+      MYSQL_PORT:         "3306"
+      MYSQL_DB:           ecommerce
+      MYSQL_USER:         admin
+      MYSQL_PASSWORD:     admin123
+      POSTGRES_HOST:      postgres-manage
+      POSTGRES_PORT:      "5432"
+      POSTGRES_MANAGE_DB: manage
+      POSTGRES_USER:      admin
+      POSTGRES_PASSWORD:  admin123
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
+      AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      DOCKER_NETWORK: demo_network
+    volumes:
+      - ../dagster.yaml:/opt/dagster/dagster_home/dagster.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      dagster-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - demo_network
+
+  # ═════════════════════════════════════════
+  # dlt source database
+  # ═════════════════════════════════════════
+
+  # Source: PostgreSQL — dlt CRM DB
+  # Tables: orders, customers, products
+  postgres-crm:
     image: postgres:15
-    container_name: demo_postgres_platform
+    container_name: demo_postgres_crm
     environment:
       POSTGRES_USER:     admin
       POSTGRES_PASSWORD: admin123
-      POSTGRES_DB:       platform
+      POSTGRES_DB:       crm
     ports:
       - "5431:5432"
     volumes:
-      - postgres_platform_data:/var/lib/postgresql/data
+      - postgres_crm_data:/var/lib/postgresql/data
       - ../../../ingestion/dlt/demo/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d platform"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d crm"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - demo_network
 
-  # ─────────────────────────────────────────
+  # ═════════════════════════════════════════
+  # Spark SDP source databases
+  # ═════════════════════════════════════════
+
   # Source: MySQL — SDP ecommerce DB
   # Tables: customers, orders, products, order_items, categories
-  # ─────────────────────────────────────────
   mysql-ecommerce:
     image: mysql:8.4
     container_name: demo_mysql_ecommerce
@@ -198,10 +271,8 @@ services:
     networks:
       - demo_network
 
-  # ─────────────────────────────────────────
   # Source: PostgreSQL — SDP manage DB
   # Tables: users, projects, tasks, issues, comments
-  # ─────────────────────────────────────────
   postgres-manage:
     image: postgres:15
     container_name: demo_postgres_manage
@@ -223,9 +294,8 @@ services:
       - demo_network
 
 volumes:
-  azurite_data:
   dagster_db_data:
-  postgres_platform_data:
+  postgres_crm_data:
   postgres_manage_data:
   mysql_data:
 

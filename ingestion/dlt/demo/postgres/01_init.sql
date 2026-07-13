@@ -1,4 +1,4 @@
--- PostgreSQL platform DB — dlt demo seed data
+-- PostgreSQL CRM DB — dlt demo seed data
 
 CREATE TABLE IF NOT EXISTS customers (
     id         SERIAL          PRIMARY KEY,
