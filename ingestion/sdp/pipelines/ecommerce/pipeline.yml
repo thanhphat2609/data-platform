@@ -6,7 +6,7 @@ libraries:
 
 # Local path for pipeline catalog metadata — container is ephemeral so no
 # need to persist this. Actual data locations are set per-view in bronze_ingestion.py.
-storage: "/tmp/sdp-pipeline/ecommerce"
+storage: "file:///tmp/sdp-pipeline/ecommerce"
 
 database: default
 
