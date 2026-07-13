@@ -35,7 +35,7 @@ Configures:
 
 ```bash
 ssh ubuntu@<ctrl-vm-ip>
-git clone https://github.com/thanhphat2669/data-platform.git
+git clone https://github.com/thanhphat2609/data-platform.git
 cd data-platform
 ```
 

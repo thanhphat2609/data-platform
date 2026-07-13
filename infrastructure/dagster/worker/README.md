@@ -28,7 +28,7 @@ Each asset op is tagged `{"dagster-celery/queue": "worker-N"}` in `orchestration
 
 ```bash
 ssh ubuntu@<worker1-vm-ip>
-git clone https://github.com/thanhphat2669/data-platform.git
+git clone https://github.com/thanhphat2609/data-platform.git
 cd data-platform
 ```
 
@@ -87,7 +87,7 @@ Expected output:
 
 ```bash
 ssh ubuntu@<worker2-vm-ip>
-git clone https://github.com/thanhphat2669/data-platform.git
+git clone https://github.com/thanhphat2609/data-platform.git
 cd data-platform
 ```
 

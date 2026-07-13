@@ -44,7 +44,7 @@ jobs:
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
-            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2669/data-platform.git"
+            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2609/data-platform.git"
             git fetch origin main
             git reset --hard origin/main
 
