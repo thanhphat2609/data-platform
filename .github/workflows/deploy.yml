@@ -184,7 +184,7 @@ jobs:
             echo "── write .env.worker1 ────────────────────"
             {
               printf 'DAGSTER_POSTGRES_URL=%s\n' \
-                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster_db"
+                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster"
               printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
               printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
               printf 'DLT_IMAGE=%s\n'                  "dlt-pipeline:latest"
@@ -265,7 +265,7 @@ jobs:
             echo "── write .env.worker2 ────────────────────"
             {
               printf 'DAGSTER_POSTGRES_URL=%s\n' \
-                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster_db"
+                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster"
               printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
               printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
               printf 'SDP_IMAGE=%s\n'                  "spark-pipeline:latest"
