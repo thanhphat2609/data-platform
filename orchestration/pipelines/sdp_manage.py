@@ -5,7 +5,6 @@ from dagster import AssetExecutionContext, AssetSelection, ScheduleDefinition, a
 from src.docker_runner import run_docker_pipeline
 
 _SDP_IMAGE = os.getenv("SDP_IMAGE", "spark-pipeline:latest")
-_SPEC = "/opt/spark/pipeline/manage/pipeline.yml"
 
 
 def _env() -> dict[str, str]:
@@ -29,9 +28,11 @@ def sdp_manage_ingestion(context: AssetExecutionContext) -> None:
         image=_SDP_IMAGE,
         cmd=[
             "bash", "-c",
-            f"envsubst '${{AZURE_STORAGE_ACCOUNT_NAME}} ${{AZURE_STORAGE_ACCOUNT_KEY}}'"
-            f" < {_SPEC} > /tmp/pipeline.yml"
-            f" && spark-pipelines run --spec /tmp/pipeline.yml",
+            "cp -r /opt/spark/pipeline/manage /tmp/manage-pipeline"
+            " && envsubst '${AZURE_STORAGE_ACCOUNT_NAME} ${AZURE_STORAGE_ACCOUNT_KEY}'"
+            " < /opt/spark/pipeline/manage/pipeline.yml"
+            " > /tmp/manage-pipeline/pipeline.yml"
+            " && spark-pipelines run --spec /tmp/manage-pipeline/pipeline.yml",
         ],
         env_vars=_env(),
     )

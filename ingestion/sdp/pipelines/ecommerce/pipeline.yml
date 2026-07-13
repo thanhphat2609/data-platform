@@ -2,7 +2,7 @@ name: sdp-ecommerce-pipeline
 
 libraries:
   - glob:
-      include: /opt/spark/pipeline/ecommerce/bronze_ingestion.py
+      include: bronze_ingestion.py
 
 # Local path for pipeline catalog metadata (ephemeral container — no persistence needed).
 # Actual Delta table locations are set per-view in bronze_ingestion.py.
