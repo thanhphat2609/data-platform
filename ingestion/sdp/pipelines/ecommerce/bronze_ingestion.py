@@ -9,7 +9,6 @@ spark-pipelines discovers this file via the pipeline.yml glob:
 import os
 import sys
 
-# Make the schema package importable when spark-pipelines executes this file directly
 sys.path.append("/opt/spark/pipeline")
 
 from pyspark import pipelines as dp
@@ -34,16 +33,9 @@ _JDBC_OPTIONS = {
 }
 
 _ACCOUNT_NAME   = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
-_ACCOUNT_KEY    = os.getenv("AZURE_STORAGE_ACCOUNT_KEY",  "")
 _INGESTION_PATH = f"abfss://bronze@{_ACCOUNT_NAME}.dfs.core.windows.net/sdp/ecommerce"
 
-# spark-pipelines blocks spark.conf.set() inside declarative pipelines.
-# Pass Azure auth via spark_conf= on each @dp.materialized_view instead.
-_AZURE_CONF = {
-    f"spark.hadoop.fs.azure.account.key.{_ACCOUNT_NAME}.dfs.core.windows.net": _ACCOUNT_KEY
-}
-
-_PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in MySQL source
+_PARTITION_COLS = ["ingestion_date"]
 
 
 def _read_table(source_table: str, query: str | None = None):
@@ -61,11 +53,10 @@ def _read_table(source_table: str, query: str | None = None):
 
 @dp.materialized_view(
     name="bronze_customers",
-    comment="Raw customers from MySQL ecommerce DB — rolling 30-day window on updated_at",
+    comment="Raw customers from MySQL ecommerce DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_customers"},
     partition_cols=_PARTITION_COLS,
     schema=_customers_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_customers():
     return _read_table("customers", query="SELECT * FROM customers")
@@ -73,11 +64,10 @@ def bronze_customers():
 
 @dp.materialized_view(
     name="bronze_orders",
-    comment="Raw orders from MySQL ecommerce DB — rolling 30-day window on order_date",
+    comment="Raw orders from MySQL ecommerce DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_orders"},
     partition_cols=_PARTITION_COLS,
     schema=_orders_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_orders():
     return _read_table("orders", query="SELECT * FROM orders")
@@ -85,11 +75,10 @@ def bronze_orders():
 
 @dp.materialized_view(
     name="bronze_categories",
-    comment="Raw product categories from MySQL ecommerce DB — full scan (static reference data)",
+    comment="Raw product categories from MySQL ecommerce DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_categories"},
     partition_cols=_PARTITION_COLS,
     schema=_categories_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_categories():
     return _read_table("categories", query="SELECT * FROM categories")
@@ -97,11 +86,10 @@ def bronze_categories():
 
 @dp.materialized_view(
     name="bronze_products",
-    comment="Raw products from MySQL ecommerce DB — rolling 30-day window on updated_at",
+    comment="Raw products from MySQL ecommerce DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_products"},
     partition_cols=_PARTITION_COLS,
     schema=_products_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_products():
     return _read_table("products", query="SELECT * FROM products")
@@ -109,11 +97,10 @@ def bronze_products():
 
 @dp.materialized_view(
     name="bronze_order_items",
-    comment="Raw order line items from MySQL ecommerce DB — rolling 30-day window on created_at",
+    comment="Raw order line items from MySQL ecommerce DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_order_items"},
     partition_cols=_PARTITION_COLS,
     schema=_order_items_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_order_items():
     return _read_table("order_items", query="SELECT * FROM order_items")

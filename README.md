@@ -47,12 +47,16 @@ Celery routes each run to the worker subscribed to that pipeline's queue — dlt
 
 ## Execution model
 
-| Pipeline | Image | Queue | Dagster triggers |
-|----------|-------|-------|-----------------|
-| dlt CRM | `dlt-pipeline:latest` | `worker-1` | `docker run dlt-pipeline:latest python pipelines/postgres_pipeline.py` |
-| dlt Events | `dlt-pipeline:latest` | `worker-1` | `docker run dlt-pipeline:latest python pipelines/api_pipeline.py` |
-| Spark SDP ecommerce | `spark-pipeline:latest` | `worker-2` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml` |
-| Spark SDP manage | `spark-pipeline:latest` | `worker-2` | `docker run spark-pipeline:latest spark-pipelines run --spec /opt/spark/pipeline/manage/pipeline.yml` |
+| Pipeline | Image | Queue | Schedule (ICT) |
+|----------|-------|-------|----------------|
+| dlt CRM | `dlt-pipeline:latest` | `worker-1` | 01:00 |
+| dlt Events | `dlt-pipeline:latest` | `worker-1` | 01:30 |
+| Spark SDP ecommerce | `spark-pipeline:latest` | `worker-2` | 02:00 |
+| Spark SDP manage | `spark-pipeline:latest` | `worker-2` | 02:30 |
+
+Spark SDP pipelines substitute Azure credentials into `pipeline.yml` at runtime via `envsubst`
+before calling `spark-pipelines run` — this is the only way to pass dynamic account names into
+the ABFS Hadoop filesystem driver inside declarative Spark pipelines.
 
 Adding a new pipeline = one new file in `orchestration/pipelines/` + one import line in `orchestration/definitions.py`.
 
@@ -68,9 +72,11 @@ data-platform/
 │   │   └── pipelines/                 postgres_pipeline.py, api_pipeline.py
 │   └── sdp/
 │       └── pipelines/                 spark-pipelines specs + @dp.materialized_view modules
+│           ├── ecommerce/             pipeline.yml (envsubst placeholders) + bronze_ingestion.py
+│           └── manage/                pipeline.yml (envsubst placeholders) + bronze_ingestion.py
 │
 ├── orchestration/                     ← Dagster definitions
-│   ├── definitions.py                 Registers all assets, jobs, and schedules
+│   ├── definitions.py                 Registers all assets, jobs, schedules, and Celery executor
 │   ├── pipelines/                     One file per pipeline — asset + job + schedule co-located
 │   │   ├── dlt_crm.py                 op_tags: worker-1 | schedule: 01:00 ICT
 │   │   ├── dlt_api.py                 op_tags: worker-1 | schedule: 01:30 ICT
@@ -81,18 +87,18 @@ data-platform/
 │
 └── infrastructure/
     ├── dagster/
-    │   ├── dagster.yaml               Shared config: Celery executor + PostgreSQL + Azure Blob logs
+    │   ├── dagster.yaml               Instance config: PostgreSQL storage + Azure Blob compute logs
     │   ├── workspace.yaml             Code location: orchestration/definitions.py
     │   ├── Dockerfile                 Dagster image (webserver, daemon, and workers all use this)
-    │   ├── demo/                      NON-PROD: all services on one VM
-    │   │   ├── docker-compose.yml     9 containers including 2 Celery workers
+    │   ├── demo/                      Source databases for local testing (non-prod)
+    │   │   ├── docker-compose.yml     3 source DB containers (CRM:5431, ecommerce:3306, manage:5433)
     │   │   └── DEMO.md                Step-by-step demo walkthrough
     │   ├── control/                   PROD: control VM (webserver + daemon + Redis + DB)
     │   │   └── docker-compose.yml
     │   └── worker/                    PROD: worker VMs (one compose per worker)
     │       ├── docker-compose-worker1.yml   dlt queue
     │       └── docker-compose-worker2.yml   SDP/Spark queue
-    ├── spark/                         Spark 4.1 image (Delta + JDBC + Azure + SDP specs)
+    ├── spark/                         Spark 4.1 image (Delta + JDBC + Azure + SDP specs + envsubst)
     └── dlt/                           dlt runtime image (Python 3.11 + dlt + adlfs)
 ```
 
@@ -125,29 +131,36 @@ docker run --rm \
   -e POSTGRES_CONNECTION_STRING=postgresql://admin:<pw>@<host>:5432/crm \
   dlt-pipeline:latest python pipelines/postgres_pipeline.py
 
-# Spark SDP — ecommerce
+# Spark SDP — ecommerce (envsubst injects account name/key into pipeline.yml at runtime)
 docker run --rm \
   -e MYSQL_HOST=<host> -e MYSQL_USER=admin -e MYSQL_PASSWORD=<pw> \
   -e AZURE_STORAGE_ACCOUNT_NAME=<account> -e AZURE_STORAGE_ACCOUNT_KEY=<key> \
   spark-pipeline:latest \
-  spark-pipelines run --spec /opt/spark/pipeline/ecommerce/pipeline.yml
+  bash -c "envsubst '\${AZURE_STORAGE_ACCOUNT_NAME} \${AZURE_STORAGE_ACCOUNT_KEY}' \
+    < /opt/spark/pipeline/ecommerce/pipeline.yml > /tmp/pipeline.yml \
+    && spark-pipelines run --spec /tmp/pipeline.yml"
 ```
 
-### 4. Demo — Dagster single-VM (NON-PROD)
+### 4. Start source databases (testing / demo)
 
-All 9 containers (control plane + 2 Celery workers + 3 source DBs) on one machine.
+The `demo/` compose contains only the 3 source databases used by the ingestion pipelines.
+Start them on the control VM before triggering any pipeline runs:
 
 ```bash
-cp infrastructure/dagster/demo/.env.demo infrastructure/dagster/demo/.env
-# Edit .env: set AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_ACCOUNT_KEY
+# Via GitHub Actions (recommended)
+# Actions → Deploy Source Databases → Run workflow
 
-docker compose \
-  -f infrastructure/dagster/demo/docker-compose.yml \
-  --env-file infrastructure/dagster/demo/.env \
-  up --build -d
+# Or manually on the control VM
+docker compose -f infrastructure/dagster/demo/docker-compose.yml up -d
 ```
 
-Open **http://localhost:3000**. See [infrastructure/dagster/demo/DEMO.md](infrastructure/dagster/demo/DEMO.md) for the full walkthrough.
+| Container | Port | DB | Credentials |
+|-----------|------|----|-------------|
+| `demo_postgres_crm` | `5431` | `crm` | `admin` / `admin123` |
+| `demo_mysql_ecommerce` | `3306` | `ecommerce` | `admin` / `admin123` |
+| `demo_postgres_manage` | `5433` | `manage` | `admin` / `admin123` |
+
+See [infrastructure/dagster/demo/DEMO.md](infrastructure/dagster/demo/DEMO.md) for the full walkthrough.
 
 ### 5. Production — multi-VM with Celery (CI/CD)
 
@@ -179,13 +192,15 @@ Each job: SSH → `git pull` → `docker build` → write `.env` from GitHub Sec
 | 10 | `AZURE_STORAGE_ACCOUNT_NAME` | Azure Blob Storage account name |
 | 11 | `AZURE_STORAGE_ACCOUNT_KEY` | Azure Blob Storage account key |
 
-> Source database credentials are **not secrets** — demo containers use fixed credentials (`admin` / `admin123`) on the master VM. The workflow constructs connection strings from `CTRL_VM_IP` + hardcoded demo credentials inline.
+> Source database credentials are **not secrets** — demo containers use fixed credentials (`admin` / `admin123`).
+> The workflow constructs JDBC connection strings from `CTRL_VM_IP` and hardcoded demo credentials inline.
 
-Manual deploy to one VM: **Actions → Deploy Data Platform → Run workflow → choose target**.
+**Workflows:**
 
-See [.github/workflows/deploy.yml](.github/workflows/deploy.yml) and
-[infrastructure/dagster/control/README.md](infrastructure/dagster/control/README.md) /
-[infrastructure/dagster/worker/README.md](infrastructure/dagster/worker/README.md) for full setup.
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `deploy.yml` | Push to `main` (auto) or manual | Deploy Dagster + Celery workers to all 3 VMs |
+| `deploy-sources.yml` | Manual only | Start source database containers on control VM |
 
 ---
 

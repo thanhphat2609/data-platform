@@ -4,8 +4,8 @@ libraries:
   - glob:
       include: bronze_ingestion.py
 
-# Local path for pipeline catalog metadata — container is ephemeral so no
-# need to persist this. Actual data locations are set per-view in bronze_ingestion.py.
+# Local path for pipeline catalog metadata (ephemeral container — no persistence needed).
+# Actual Delta table locations are set per-view in bronze_ingestion.py.
 storage: "file:///tmp/sdp-pipeline/manage"
 
 database: default
@@ -14,6 +14,8 @@ configuration:
   spark.sql.shuffle.partitions: "4"
   spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
 
-  # Azure Blob auth is configured dynamically in bronze_ingestion.py
-  # using AZURE_STORAGE_ACCOUNT_NAME / AZURE_STORAGE_ACCOUNT_KEY env vars.
-  # No account name or key is hardcoded here.
+  # Azure Blob Storage — SharedKey auth for ABFS.
+  # Account name and key are injected by envsubst at container startup:
+  #   envsubst '${AZURE_STORAGE_ACCOUNT_NAME} ${AZURE_STORAGE_ACCOUNT_KEY}' \
+  #     < pipeline.yml > /tmp/pipeline.yml
+  spark.hadoop.fs.azure.account.key.${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net: "${AZURE_STORAGE_ACCOUNT_KEY}"

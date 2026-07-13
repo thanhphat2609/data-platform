@@ -9,7 +9,6 @@ spark-pipelines discovers this file via the pipeline.yml glob:
 import os
 import sys
 
-# Make the schema package importable when spark-pipelines executes this file directly
 sys.path.append("/opt/spark/pipeline")
 
 from pyspark import pipelines as dp
@@ -33,16 +32,9 @@ _JDBC_OPTIONS = {
 }
 
 _ACCOUNT_NAME   = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
-_ACCOUNT_KEY    = os.getenv("AZURE_STORAGE_ACCOUNT_KEY",  "")
 _INGESTION_PATH = f"abfss://bronze@{_ACCOUNT_NAME}.dfs.core.windows.net/sdp/manage"
 
-# spark-pipelines blocks spark.conf.set() inside declarative pipelines.
-# Pass Azure auth via spark_conf= on each @dp.materialized_view instead.
-_AZURE_CONF = {
-    f"spark.hadoop.fs.azure.account.key.{_ACCOUNT_NAME}.dfs.core.windows.net": _ACCOUNT_KEY
-}
-
-_PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in PostgreSQL source
+_PARTITION_COLS = ["ingestion_date"]
 
 
 def _read_table(source_table: str, query: str | None = None):
@@ -60,11 +52,10 @@ def _read_table(source_table: str, query: str | None = None):
 
 @dp.materialized_view(
     name="bronze_users",
-    comment="Raw users from PostgreSQL manage DB — rolling 30-day window on created_at",
+    comment="Raw users from PostgreSQL manage DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_users"},
     partition_cols=_PARTITION_COLS,
     schema=_users_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_users():
     return _read_table("users", query="SELECT * FROM users")
@@ -72,11 +63,10 @@ def bronze_users():
 
 @dp.materialized_view(
     name="bronze_projects",
-    comment="Raw projects from PostgreSQL manage DB — rolling 30-day window on created_at",
+    comment="Raw projects from PostgreSQL manage DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_projects"},
     partition_cols=_PARTITION_COLS,
     schema=_projects_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_projects():
     return _read_table("projects", query="SELECT * FROM projects")
@@ -84,11 +74,10 @@ def bronze_projects():
 
 @dp.materialized_view(
     name="bronze_tasks",
-    comment="Raw tasks from PostgreSQL manage DB — rolling 30-day window on created_at",
+    comment="Raw tasks from PostgreSQL manage DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_tasks"},
     partition_cols=_PARTITION_COLS,
     schema=_tasks_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_tasks():
     return _read_table("tasks", query="SELECT * FROM tasks")
@@ -96,11 +85,10 @@ def bronze_tasks():
 
 @dp.materialized_view(
     name="bronze_issues",
-    comment="Raw issues from PostgreSQL manage DB — rolling 30-day window on created_at",
+    comment="Raw issues from PostgreSQL manage DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_issues"},
     partition_cols=_PARTITION_COLS,
     schema=_issues_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_issues():
     return _read_table("issues", query="SELECT * FROM issues")
@@ -108,11 +96,10 @@ def bronze_issues():
 
 @dp.materialized_view(
     name="bronze_comments",
-    comment="Raw comments from PostgreSQL manage DB — rolling 30-day window on created_at",
+    comment="Raw comments from PostgreSQL manage DB",
     table_properties={"location": f"{_INGESTION_PATH}/bronze_comments"},
     partition_cols=_PARTITION_COLS,
     schema=_comments_schema,
-    spark_conf=_AZURE_CONF,
 )
 def bronze_comments():
     return _read_table("comments", query="SELECT * FROM comments")

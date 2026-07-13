@@ -27,7 +27,12 @@ def sdp_manage_ingestion(context: AssetExecutionContext) -> None:
     run_docker_pipeline(
         context,
         image=_SDP_IMAGE,
-        cmd=["spark-pipelines", "run", "--spec", _SPEC],
+        cmd=[
+            "bash", "-c",
+            f"envsubst '${{AZURE_STORAGE_ACCOUNT_NAME}} ${{AZURE_STORAGE_ACCOUNT_KEY}}'"
+            f" < {_SPEC} > /tmp/pipeline.yml"
+            f" && spark-pipelines run --spec /tmp/pipeline.yml",
+        ],
         env_vars=_env(),
     )
 
