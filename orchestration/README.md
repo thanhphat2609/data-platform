@@ -1,47 +1,56 @@
 # Orchestration
 
-Dagster software-defined assets — schedules, Celery-based distributed execution, and Azure Blob asset persistence.
+Dagster software-defined assets — Celery-based distributed execution, daily schedules, and Docker container pipeline triggering.
+
+---
 
 ## Project structure
 
 ```
 orchestration/
-├── definitions.py          ← Dagster entry point — registers all assets, jobs, schedules, resources
-├── assets/
-│   ├── dlt_assets.py       dlt_crm_ingestion, dlt_events_ingestion   (docker run dlt-pipeline)
-│   ├── sdp_assets.py       sdp_ecommerce_ingestion, sdp_manage_ingestion  (docker run spark-pipeline)
-│   ├── sales_assets.py     sales_raw → sales_transformed  (routed to worker-2)
-│   └── sap_assets.py       sap_raw → sap_transformed      (routed to worker-1)
-├── jobs/
-│   └── __init__.py         sales_job, sap_job, dlt_ingestion_job, sdp_ingestion_job
-├── schedules/
-│   └── __init__.py         daily_sales_schedule, daily_sap_schedule, daily_dlt_schedule, daily_sdp_schedule
-├── resources/
-│   └── blob_io_manager.py  AzureBlobParquetIOManager
+├── definitions.py          ← Dagster entry point — registers all assets, jobs, schedules, and Celery executor
+├── pipelines/              ← One file per pipeline: asset + job + schedule co-located
+│   ├── dlt_crm.py          op_tags: worker-1 | schedule: 01:00 ICT
+│   ├── dlt_api.py          op_tags: worker-1 | schedule: 01:30 ICT
+│   ├── sdp_ecommerce.py    op_tags: worker-2 | schedule: 02:00 ICT
+│   └── sdp_manage.py       op_tags: worker-2 | schedule: 02:30 ICT
 └── src/
-    ├── docker_runner.py    Shared helper for pipeline container execution
-    ├── sales_processor.py  extract + transform business logic
-    └── sap_processor.py    extract + transform business logic
+    └── docker_runner.py    Shared helper: docker run + log streaming into Dagster
 ```
+
+---
 
 ## Asset graph
 
 ```
-dlt_crm_ingestion       ─┐
-dlt_events_ingestion    ─┤  (docker run dlt-pipeline:latest python <script>)
-                         │
-sdp_ecommerce_ingestion ─┤  (docker run spark-pipeline:latest spark-pipelines run --spec ...)
-sdp_manage_ingestion    ─┘
-
-sap_raw   ──► sap_transformed      (worker-1, queue: worker-1)
-sales_raw ──► sales_transformed    (worker-2, queue: worker-2)
+dlt_crm_ingestion       ── worker-1  (docker run dlt-pipeline:latest python pipelines/postgres_pipeline.py)
+dlt_api_ingestion       ── worker-1  (docker run dlt-pipeline:latest python pipelines/api_pipeline.py)
+sdp_ecommerce_ingestion ── worker-2  (docker run spark-pipeline:latest bash -c "envsubst ... && spark-pipelines run")
+sdp_manage_ingestion    ── worker-2  (docker run spark-pipeline:latest bash -c "envsubst ... && spark-pipelines run")
+                                │
+                                ▼
+                   Azure Blob Storage (bronze/)
+                   Parquet (dlt) / Delta Lake (SDP)
 ```
 
-`sap_transformed` and `sales_transformed` are persisted as Parquet in Azure Blob automatically via `AzureBlobParquetIOManager`. Downstream assets receive the previous output as a `pd.DataFrame` — no manual read/write needed.
+Each asset is independent — no upstream/downstream dependencies between them. All four run in parallel across two Celery workers.
+
+---
+
+## Execution model
+
+| Asset | Queue | Image | Schedule (ICT) | Source |
+|-------|-------|-------|----------------|--------|
+| `dlt_crm_ingestion` | `worker-1` | `dlt-pipeline:latest` | 01:00 | PostgreSQL CRM DB |
+| `dlt_api_ingestion` | `worker-1` | `dlt-pipeline:latest` | 01:30 | REST APIs (USGS, Open-Meteo, Exchange Rates) |
+| `sdp_ecommerce_ingestion` | `worker-2` | `spark-pipeline:latest` | 02:00 | MySQL ecommerce DB (5 tables) |
+| `sdp_manage_ingestion` | `worker-2` | `spark-pipeline:latest` | 02:30 | PostgreSQL manage DB (5 tables) |
+
+---
 
 ## How pipeline containers are triggered
 
-`src/docker_runner.py` provides a single helper used by all ingestion assets:
+`src/docker_runner.py` provides a single helper used by all pipeline assets:
 
 ```python
 run_docker_pipeline(
@@ -56,119 +65,123 @@ This calls `docker run --rm [-e KEY=VAL ...] [--network <net>] <image> <cmd...>`
 
 `DOCKER_NETWORK` env var (set in Compose files) attaches pipeline containers to the same bridge network as source databases.
 
-## Execution model
+### SDP / Spark pipelines — envsubst pattern
 
-| Asset | Trigger | Image |
-|-------|---------|-------|
-| `dlt_crm_ingestion` | `docker run dlt-pipeline:latest python pipelines/postgres_pipeline.py` | `dlt-pipeline:latest` |
-| `dlt_events_ingestion` | `docker run dlt-pipeline:latest python pipelines/api_pipeline.py` | `dlt-pipeline:latest` |
-| `sdp_ecommerce_ingestion` | `docker run spark-pipeline:latest spark-pipelines run --spec .../ecommerce/pipeline.yml` | `spark-pipeline:latest` |
-| `sdp_manage_ingestion` | `docker run spark-pipeline:latest spark-pipelines run --spec .../manage/pipeline.yml` | `spark-pipeline:latest` |
-
-## IO manager
-
-`AzureBlobParquetIOManager` in `resources/blob_io_manager.py`:
-- Writes every asset output as `<base_folder>/<asset_key>.parquet` in Azure Blob
-- Reads it back and injects as `pd.DataFrame` into downstream assets
-- Configured via `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_CONTAINER` env vars
+Spark Declarative Pipelines require Azure credentials in `pipeline.yml` at load time. Since the account name is dynamic, credentials are injected via `envsubst` before `spark-pipelines` reads the spec:
 
 ```python
-def sap_transformed(sap_raw: pd.DataFrame)  ← IO manager loads sap_raw.parquet automatically
-    ...
-    return pd.DataFrame(...)                 ← IO manager uploads sap_transformed.parquet automatically
+cmd=[
+    "bash", "-c",
+    "cp -r /opt/spark/pipeline/ecommerce /tmp/ecommerce-pipeline"
+    " && envsubst '${AZURE_STORAGE_ACCOUNT_NAME} ${AZURE_STORAGE_ACCOUNT_KEY}'"
+    " < /opt/spark/pipeline/ecommerce/pipeline.yml"
+    " > /tmp/ecommerce-pipeline/pipeline.yml"
+    " && spark-pipelines run --spec /tmp/ecommerce-pipeline/pipeline.yml",
+]
 ```
 
-## Celery worker routing
+The pipeline directory is copied to `/tmp` first so the substituted spec stays alongside `bronze_ingestion.py` — `spark-pipelines` resolves the `libraries` glob relative to the spec file's directory.
 
-Assets are tagged with `op_tags={"dagster-celery/queue": "worker-N"}`. Dagster routes each op to the correct Celery worker — no manual wiring needed.
+---
 
-| Queue | Worker | Assets |
-|-------|--------|--------|
-| `worker-1` | `dagster-worker-1` | `sap_raw`, `sap_transformed` |
-| `worker-2` | `dagster-worker-2` | `sales_raw`, `sales_transformed` |
-| `default` | daemon | `dlt_*`, `sdp_*` |
+## Celery executor
+
+The Celery executor is configured in `definitions.py` (not `dagster.yaml`):
+
+```python
+_celery = celery_executor.configured({
+    "broker":  {"env": "CELERY_BROKER_URL"},
+    "backend": {"env": "CELERY_RESULT_BACKEND"},
+})
+
+defs = Definitions(assets=[...], jobs=[...], schedules=[...], executor=_celery)
+```
+
+Assets are routed via `op_tags`:
+
+| Tag | Worker | Assets |
+|-----|--------|--------|
+| `dagster-celery/queue: worker-1` | `dagster-worker-1` | `dlt_crm_ingestion`, `dlt_api_ingestion` |
+| `dagster-celery/queue: worker-2` | `dagster-worker-2` | `sdp_ecommerce_ingestion`, `sdp_manage_ingestion` |
+
+---
 
 ## Environment variables
 
-| Variable | Purpose |
-|----------|---------|
-| `DLT_IMAGE` | dlt pipeline image reference (default: `dlt-pipeline:latest`) |
-| `SDP_IMAGE` | Spark SDP pipeline image reference (default: `spark-pipeline:latest`) |
-| `DOCKER_NETWORK` | Docker network to attach pipeline containers to (set in Compose files) |
-| `DESTINATION__FILESYSTEM__BUCKET_URL` | dlt destination bucket URL |
-| `DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME` | Azure storage account |
-| `DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY` | Azure storage key |
-| `POSTGRES_CONNECTION_STRING` | dlt CRM source DB |
-| `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` | SDP ecommerce source |
-| `POSTGRES_HOST` / `POSTGRES_MANAGE_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | SDP manage source |
-| `AZURE_STORAGE_CONNECTION_STRING` | Blob IO manager — read/write asset Parquet outputs |
-| `AZURE_STORAGE_CONTAINER` | Container name for asset outputs |
-| `DAGSTER_POSTGRES_URL` | Dagster metadata DB (injected by infrastructure/dagster) |
-| `CELERY_BROKER_URL` | Redis broker (injected by infrastructure/dagster) |
-| `CELERY_RESULT_BACKEND` | Redis result backend (injected by infrastructure/dagster) |
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `DLT_IMAGE` | `dlt_crm.py`, `dlt_api.py` | dlt pipeline image (default: `dlt-pipeline:latest`) |
+| `SDP_IMAGE` | `sdp_ecommerce.py`, `sdp_manage.py` | Spark SDP image (default: `spark-pipeline:latest`) |
+| `DOCKER_NETWORK` | `docker_runner.py` | Bridge network for pipeline containers to reach source DBs |
+| `DESTINATION__FILESYSTEM__BUCKET_URL` | dlt pipelines | dlt destination bucket (`az://bronze/dlt`) |
+| `DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_NAME` | dlt pipelines | Azure storage account |
+| `DESTINATION__FILESYSTEM__CREDENTIALS__AZURE_STORAGE_ACCOUNT_KEY` | dlt pipelines | Azure storage key |
+| `POSTGRES_CONNECTION_STRING` | `dlt_crm.py` | CRM source DB |
+| `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` | `sdp_ecommerce.py` | ecommerce source DB |
+| `POSTGRES_HOST` / `POSTGRES_MANAGE_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `sdp_manage.py` | manage source DB |
+| `AZURE_STORAGE_ACCOUNT_NAME` | SDP pipelines | Azure account name (substituted into pipeline.yml) |
+| `AZURE_STORAGE_ACCOUNT_KEY` | SDP pipelines | Azure account key (substituted into pipeline.yml) |
+| `DAGSTER_POSTGRES_URL` | Dagster instance | Metadata DB |
+| `CELERY_BROKER_URL` | Dagster + Celery | Redis broker |
+| `CELERY_RESULT_BACKEND` | Dagster + Celery | Redis result backend |
+
+---
 
 ## Deploy
 
 All deployment is managed via `infrastructure/dagster/` — no manual server setup needed.
 
 ```bash
-# Master VM
+# Control VM (webserver + daemon + Redis + metadata DB)
 docker compose -f infrastructure/dagster/control/docker-compose.yml up -d
 
-# Worker VM (set MASTER_VM_IP in .env)
-docker compose -f infrastructure/dagster/worker/docker-compose.yml up -d
+# Worker VM 1 (dlt queue)
+docker compose -f infrastructure/dagster/worker/docker-compose-worker1.yml up -d
+
+# Worker VM 2 (SDP/Spark queue)
+docker compose -f infrastructure/dagster/worker/docker-compose-worker2.yml up -d
 ```
 
 See [infrastructure/dagster/README.md](../infrastructure/dagster/README.md) for the full deployment guide.
 
+---
+
 ## Adding a new pipeline
 
-### New dlt pipeline
-
-**1. Pipeline file** — add `ingestion/dlt/pipelines/<name>_pipeline.py` with a `__main__` block:
+**1. Create `orchestration/pipelines/<name>.py`** with asset + job + schedule:
 
 ```python
-@dlt.source(name="my_source")
-def my_source(): ...
+import os
+from dagster import AssetExecutionContext, AssetSelection, ScheduleDefinition, asset, define_asset_job
+from src.docker_runner import run_docker_pipeline
 
-if __name__ == "__main__":
-    pipeline = dlt.pipeline("my_ingestion", destination="filesystem", dataset_name="my")
-    print(pipeline.run(my_source()))
+_IMAGE = os.getenv("MY_IMAGE", "my-pipeline:latest")
+
+@asset(
+    key_prefix=["my"],
+    group_name="my_group",
+    op_tags={"dagster-celery/queue": "worker-1"},  # or worker-2
+    description="...",
+)
+def my_ingestion(context: AssetExecutionContext) -> None:
+    run_docker_pipeline(context, image=_IMAGE, cmd=["python", "my_pipeline.py"], env_vars={...})
+
+job = define_asset_job("my_job", selection=AssetSelection.groups("my_group"))
+schedule = ScheduleDefinition(name="daily_my_schedule", job=job, cron_schedule="0 3 * * *", execution_timezone="Asia/Ho_Chi_Minh")
 ```
 
-**2. Rebuild dlt image** — `docker build -f infrastructure/dlt/Dockerfile -t dlt-pipeline:latest .`
-
-**3. Dagster asset** — add to `assets/dlt_assets.py`:
+**2. Register in `definitions.py`**:
 
 ```python
-@asset(key_prefix=["dlt"], group_name="dlt_ingestion")
-def dlt_my_ingestion(context: AssetExecutionContext) -> None:
-    run_docker_pipeline(context, image=_DLT_IMAGE, cmd=["python", "pipelines/my_pipeline.py"], env_vars=_dlt_env())
+from pipelines import my_module
+
+defs = Definitions(
+    assets=[..., my_module.my_ingestion],
+    jobs=[..., my_module.job],
+    schedules=[..., my_module.schedule],
+    executor=_celery,
+)
 ```
-
-**4. Register** in `jobs/__init__.py`, `schedules/__init__.py`, and `definitions.py`.
-
-### New Spark SDP pipeline
-
-**1. Pipeline spec** — add `ingestion/sdp/pipelines/<name>/pipeline.yml` + `bronze_ingestion.py`
-
-**2. Rebuild Spark image** — `docker build -f infrastructure/spark/Dockerfile.spark -t spark-pipeline:latest .`
-
-**3. Dagster asset** — add to `assets/sdp_assets.py`:
-
-```python
-@asset(key_prefix=["sdp"], group_name="sdp_ingestion")
-def sdp_my_ingestion(context: AssetExecutionContext) -> None:
-    run_docker_pipeline(context, image=_SDP_IMAGE,
-        cmd=["spark-pipelines", "run", "--spec", f"{_SPEC_BASE}/my/pipeline.yml"],
-        env_vars=_sdp_env())
-```
-
-**4. Register** in `jobs/__init__.py`, `schedules/__init__.py`, and `definitions.py`.
-
-## Project Demo
-
-Watch the full orchestration demo on YouTube: [Watch here](https://youtu.be/KRVlAa_19vI)
 
 ---
 
@@ -178,7 +191,12 @@ Watch the full orchestration demo on YouTube: [Watch here](https://youtu.be/KRVl
 |---------|------------------------|
 | `BashOperator` / `DockerOperator` | `@asset` + `run_docker_pipeline()` |
 | `@dag` / `DAG()` | `define_asset_job` |
-| XCom for passing data | Function parameter (IO manager loads from blob) |
-| Manual task dependency (`>>`) | Function parameter name = upstream asset name |
+| Manual task dependency (`>>`) | Function parameter name = upstream asset key |
 | No built-in data lineage | Full asset lineage in UI |
 | `queue=` on operator | `op_tags={"dagster-celery/queue": ...}` on asset |
+
+---
+
+## Project Demo
+
+Watch the full orchestration demo on YouTube: [Watch here](https://youtu.be/KRVlAa_19vI)
