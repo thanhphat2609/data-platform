@@ -22,6 +22,9 @@ env:
 # ─────────────────────────────────────────────────────────────────────────────
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #
+#   GitHub
+#     GH_TOKEN            Personal Access Token (repo scope) — for git fetch on VMs
+#
 #   VM access
 #     CTRL_VM_IP          Private/public IP of the Control VM
 #     WORKER1_VM_IP       Private/public IP of Worker VM 1
@@ -62,6 +65,7 @@ jobs:
       - name: SSH → git pull → write .env → docker compose up
         uses: appleboy/ssh-action@v1.0.3
         env:
+          GH_TOKEN:                   ${{ secrets.GH_TOKEN }}
           DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
           AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
@@ -73,12 +77,13 @@ jobs:
           key:             ${{ secrets.CTRL_VM_SSH_KEY }}
           command_timeout: 10m
           # Forward env vars to the remote shell (values never appear in script text)
-          envs: DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,DLT_IMAGE,SDP_IMAGE
+          envs: GH_TOKEN,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,DLT_IMAGE,SDP_IMAGE
           script: |
             set -e
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
+            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2669/data-platform.git"
             git fetch origin main
             git reset --hard origin/main
 
@@ -118,6 +123,7 @@ jobs:
       - name: SSH → git pull → build dlt image → write .env → docker compose up
         uses: appleboy/ssh-action@v1.0.3
         env:
+          GH_TOKEN:                   ${{ secrets.GH_TOKEN }}
           CTRL_VM_IP:                 ${{ secrets.CTRL_VM_IP }}
           DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
@@ -128,12 +134,13 @@ jobs:
           username:        ${{ secrets.VM_SSH_USER }}
           key:             ${{ secrets.WORKER1_VM_SSH_KEY }}
           command_timeout: 15m
-          envs: CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,POSTGRES_CONNECTION_STRING
+          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,POSTGRES_CONNECTION_STRING
           script: |
             set -e
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
+            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2669/data-platform.git"
             git fetch origin main
             git reset --hard origin/main
 
@@ -183,6 +190,7 @@ jobs:
       - name: SSH → git pull → build spark image → write .env → docker compose up
         uses: appleboy/ssh-action@v1.0.3
         env:
+          GH_TOKEN:                   ${{ secrets.GH_TOKEN }}
           CTRL_VM_IP:                 ${{ secrets.CTRL_VM_IP }}
           DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
@@ -198,12 +206,13 @@ jobs:
           username:        ${{ secrets.VM_SSH_USER }}
           key:             ${{ secrets.WORKER2_VM_SSH_KEY }}
           command_timeout: 20m
-          envs: CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,MYSQL_HOST,MYSQL_USER,MYSQL_PASSWORD,POSTGRES_HOST,POSTGRES_USER,POSTGRES_PASSWORD
+          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,MYSQL_HOST,MYSQL_USER,MYSQL_PASSWORD,POSTGRES_HOST,POSTGRES_USER,POSTGRES_PASSWORD
           script: |
             set -e
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
+            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2669/data-platform.git"
             git fetch origin main
             git reset --hard origin/main
 

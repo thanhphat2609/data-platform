@@ -167,6 +167,7 @@ Each job: SSH → `git pull` → `docker build` → write `.env` from GitHub Sec
 
 | Secret | Description |
 |--------|-------------|
+| `GH_TOKEN` | GitHub Personal Access Token (`repo` scope) — used by VMs to `git fetch` |
 | `CTRL_VM_IP` | Control VM IP |
 | `WORKER1_VM_IP` | Worker VM 1 IP |
 | `WORKER2_VM_IP` | Worker VM 2 IP |
