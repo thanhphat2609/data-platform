@@ -33,7 +33,9 @@ _JDBC_OPTIONS = {
     "fetchsize": "10000",
 }
 
-_INGESTION_PATH = "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/ecommerce"
+_INGESTION_PATH = (
+    f"abfss://bronze@{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.dfs.core.windows.net/sdp/ecommerce"
+)
 
 _PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in MySQL source
 

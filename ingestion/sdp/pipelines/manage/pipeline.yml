@@ -4,21 +4,17 @@ libraries:
   - glob:
       include: bronze_ingestion.py
 
-# Delta metadata / checkpoint root
-storage: "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/manage"
+# Delta metadata / checkpoint root — expanded by envsubst at container startup
+storage: "abfss://bronze@${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/sdp/manage"
 
 database: default
 
 configuration:
   spark.sql.shuffle.partitions: "4"
 
-  # spark.sql.extensions:            "io.delta.sql.DeltaSparkSessionExtension"
   spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
-  # spark.sql.warehouse.dir:         "abfss://bronze@dataplatformstrorage.dfs.core.windows.net/sdp/warehouse"
 
   # Azure Blob Storage (ABFS — SharedKey auth)
   # Key property must use the DFS endpoint suffix (.dfs.core.windows.net)
-  spark.hadoop.fs.azure.account.key.dataplatformstrorage.dfs.core.windows.net: "IF0VxOt9qrjqA5E+h1x1qNtUl13YyAMGp2NTL7zwH9o7kqBVhSuBkLzUbN0WZM803syy5Uy18JUo+AStKGJ4vA=="
-
-  # DataFlint observability — not included in demo image; add JAR to enable
-  # spark.plugins: "io.dataflint.spark.SparkDataflintPlugin"
+  # Both the account name (in the key) and the key value are injected via envsubst
+  spark.hadoop.fs.azure.account.key.${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net: "${AZURE_STORAGE_ACCOUNT_KEY}"
