@@ -1,0 +1,246 @@
+name: Deploy Data Platform
+
+# Triggers:
+#   - Push to main → deploys all three VMs automatically
+#   - Manual trigger → choose which VM to deploy (useful for partial updates)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which VM to deploy"
+        required: false
+        default: all
+        type: choice
+        options: [all, control, worker1, worker2]
+
+# Repo path on every VM — must match where you cloned the repo
+env:
+  REPO_PATH: ~/data-platform
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#
+#   VM access
+#     CTRL_VM_IP          Private/public IP of the Control VM
+#     WORKER1_VM_IP       Private/public IP of Worker VM 1
+#     WORKER2_VM_IP       Private/public IP of Worker VM 2
+#     VM_SSH_USER         SSH username on all VMs (e.g. azureuser)
+#     CTRL_VM_SSH_KEY     Private SSH key for Control VM
+#     WORKER1_VM_SSH_KEY  Private SSH key for Worker VM 1
+#     WORKER2_VM_SSH_KEY  Private SSH key for Worker VM 2
+#
+#   Dagster
+#     DAGSTER_DB_PASSWORD  Postgres password for Dagster metadata DB
+#
+#   Azure Blob Storage
+#     AZURE_STORAGE_ACCOUNT_NAME
+#     AZURE_STORAGE_ACCOUNT_KEY
+#
+#   dlt source (Worker VM 1)
+#     POSTGRES_CONNECTION_STRING  e.g. postgresql://admin:pw@host:5432/crm
+#
+#   SDP sources (Worker VM 2)
+#     MYSQL_HOST / MYSQL_USER / MYSQL_PASSWORD
+#     POSTGRES_HOST / POSTGRES_USER / POSTGRES_PASSWORD
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1. Control VM — webserver + daemon + Redis + metadata DB
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy-control:
+    name: "Control VM"
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.target == 'all' ||
+      github.event.inputs.target == 'control'
+    steps:
+      - name: SSH → git pull → write .env → docker compose up
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          DLT_IMAGE:                  dlt-pipeline:latest
+          SDP_IMAGE:                  spark-pipeline:latest
+        with:
+          host:            ${{ secrets.CTRL_VM_IP }}
+          username:        ${{ secrets.VM_SSH_USER }}
+          key:             ${{ secrets.CTRL_VM_SSH_KEY }}
+          command_timeout: 10m
+          # Forward env vars to the remote shell (values never appear in script text)
+          envs: DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,DLT_IMAGE,SDP_IMAGE
+          script: |
+            set -e
+            cd ${{ env.REPO_PATH }}
+
+            echo "── git pull ──────────────────────────────"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "── write .env ────────────────────────────"
+            {
+              printf 'DAGSTER_DB_PASSWORD=%s\n'        "$DAGSTER_DB_PASSWORD"
+              printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
+              printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
+              printf 'DLT_IMAGE=%s\n'                  "$DLT_IMAGE"
+              printf 'SDP_IMAGE=%s\n'                  "$SDP_IMAGE"
+            } > infrastructure/dagster/control/.env
+
+            echo "── docker compose up ─────────────────────"
+            docker compose \
+              -f infrastructure/dagster/control/docker-compose.yml \
+              --env-file infrastructure/dagster/control/.env \
+              up --build -d
+
+            echo "── status ────────────────────────────────"
+            docker compose -f infrastructure/dagster/control/docker-compose.yml ps
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2. Worker VM 1 — Celery worker for dlt pipelines (queue: worker-1)
+  #    Depends on control being up (or already running if deploy-control skipped)
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy-worker1:
+    name: "Worker VM 1 (dlt)"
+    runs-on: ubuntu-latest
+    needs: deploy-control
+    # Run if: control succeeded OR control was skipped (manual worker-only deploy)
+    if: >-
+      (needs.deploy-control.result == 'success' || needs.deploy-control.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       github.event.inputs.target == 'all' ||
+       github.event.inputs.target == 'worker1')
+    steps:
+      - name: SSH → git pull → build dlt image → write .env → docker compose up
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          CTRL_VM_IP:                 ${{ secrets.CTRL_VM_IP }}
+          DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+        with:
+          host:            ${{ secrets.WORKER1_VM_IP }}
+          username:        ${{ secrets.VM_SSH_USER }}
+          key:             ${{ secrets.WORKER1_VM_SSH_KEY }}
+          command_timeout: 15m
+          envs: CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,POSTGRES_CONNECTION_STRING
+          script: |
+            set -e
+            cd ${{ env.REPO_PATH }}
+
+            echo "── git pull ──────────────────────────────"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "── build dlt image (~2 min) ──────────────"
+            docker build -t dlt-pipeline:latest -f infrastructure/dlt/Dockerfile .
+
+            echo "── build dagster image ───────────────────"
+            docker build \
+              -t dagster-worker:latest \
+              -f infrastructure/dagster/Dockerfile .
+
+            echo "── write .env.worker1 ────────────────────"
+            {
+              printf 'DAGSTER_POSTGRES_URL=%s\n' \
+                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster_db"
+              printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
+              printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
+              printf 'DLT_IMAGE=%s\n'                  "dlt-pipeline:latest"
+              printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
+              printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
+              printf 'POSTGRES_CONNECTION_STRING=%s\n'  "$POSTGRES_CONNECTION_STRING"
+            } > infrastructure/dagster/worker/.env.worker1
+
+            echo "── docker compose up ─────────────────────"
+            docker compose \
+              -f infrastructure/dagster/worker/docker-compose-worker1.yml \
+              --env-file infrastructure/dagster/worker/.env.worker1 \
+              up --build -d
+
+            echo "── status ────────────────────────────────"
+            docker compose -f infrastructure/dagster/worker/docker-compose-worker1.yml ps
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. Worker VM 2 — Celery worker for SDP/Spark pipelines (queue: worker-2)
+  #    Spark image build takes ~5 min — timeout set to 20 min
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy-worker2:
+    name: "Worker VM 2 (SDP/Spark)"
+    runs-on: ubuntu-latest
+    needs: deploy-control
+    if: >-
+      (needs.deploy-control.result == 'success' || needs.deploy-control.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       github.event.inputs.target == 'all' ||
+       github.event.inputs.target == 'worker2')
+    steps:
+      - name: SSH → git pull → build spark image → write .env → docker compose up
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          CTRL_VM_IP:                 ${{ secrets.CTRL_VM_IP }}
+          DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          MYSQL_HOST:                 ${{ secrets.MYSQL_HOST }}
+          MYSQL_USER:                 ${{ secrets.MYSQL_USER }}
+          MYSQL_PASSWORD:             ${{ secrets.MYSQL_PASSWORD }}
+          POSTGRES_HOST:              ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_USER:              ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD:          ${{ secrets.POSTGRES_PASSWORD }}
+        with:
+          host:            ${{ secrets.WORKER2_VM_IP }}
+          username:        ${{ secrets.VM_SSH_USER }}
+          key:             ${{ secrets.WORKER2_VM_SSH_KEY }}
+          command_timeout: 20m
+          envs: CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,MYSQL_HOST,MYSQL_USER,MYSQL_PASSWORD,POSTGRES_HOST,POSTGRES_USER,POSTGRES_PASSWORD
+          script: |
+            set -e
+            cd ${{ env.REPO_PATH }}
+
+            echo "── git pull ──────────────────────────────"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "── build spark image (~5 min) ────────────"
+            docker build -t spark-pipeline:latest -f infrastructure/spark/Dockerfile.spark .
+
+            echo "── build dagster image ───────────────────"
+            docker build \
+              -t dagster-worker:latest \
+              -f infrastructure/dagster/Dockerfile .
+
+            echo "── write .env.worker2 ────────────────────"
+            {
+              printf 'DAGSTER_POSTGRES_URL=%s\n' \
+                "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster_db"
+              printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
+              printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
+              printf 'SDP_IMAGE=%s\n'                  "spark-pipeline:latest"
+              printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
+              printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
+              printf 'MYSQL_HOST=%s\n'      "$MYSQL_HOST"
+              printf 'MYSQL_PORT=%s\n'      "3306"
+              printf 'MYSQL_DB=%s\n'        "ecommerce"
+              printf 'MYSQL_USER=%s\n'      "$MYSQL_USER"
+              printf 'MYSQL_PASSWORD=%s\n'  "$MYSQL_PASSWORD"
+              printf 'POSTGRES_HOST=%s\n'      "$POSTGRES_HOST"
+              printf 'POSTGRES_PORT=%s\n'      "5432"
+              printf 'POSTGRES_MANAGE_DB=%s\n' "manage"
+              printf 'POSTGRES_USER=%s\n'      "$POSTGRES_USER"
+              printf 'POSTGRES_PASSWORD=%s\n'  "$POSTGRES_PASSWORD"
+            } > infrastructure/dagster/worker/.env.worker2
+
+            echo "── docker compose up ─────────────────────"
+            docker compose \
+              -f infrastructure/dagster/worker/docker-compose-worker2.yml \
+              --env-file infrastructure/dagster/worker/.env.worker2 \
+              up --build -d
+
+            echo "── status ────────────────────────────────"
+            docker compose -f infrastructure/dagster/worker/docker-compose-worker2.yml ps

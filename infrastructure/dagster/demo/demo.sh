@@ -1,7 +1,7 @@
 # SSH to VM
-ssh -i ./dagster-key-pair.pem azureuser@20.2.141.56 # Master VM
-ssh -i ./dagster-key-pair.pem azureuser@52.237.82.255 # Worker VM-1
-ssh -i ./dagster-key-pair.pem azureuser@20.205.19.175 # Worker VM-2
+ssh -i C:\Users\Thanh Phat\Downloads\azure_key_pair\master-vm_key.pem azureuser@4.194.249.204 # Master VM
+ssh -i C:\Users\Thanh Phat\Downloads\azure_key_pair\master-vm_key.pem azureuser@172.188.16.170 # Worker VM-1
+ssh -i C:\Users\Thanh Phat\Downloads\azure_key_pair\master-vm_key.pem azureuser@172.188.83.134 # Worker VM-2
 
 
 # Migrate Folder
