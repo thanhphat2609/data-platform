@@ -166,6 +166,12 @@ def sdp_my_ingestion(context: AssetExecutionContext) -> None:
 
 **4. Register** in `jobs/__init__.py`, `schedules/__init__.py`, and `definitions.py`.
 
+## Project Demo
+
+Watch the full orchestration demo on YouTube: [Watch here](https://youtu.be/KRVlAa_19vI)
+
+---
+
 ## Dagster vs Airflow
 
 | Airflow | Dagster (this project) |

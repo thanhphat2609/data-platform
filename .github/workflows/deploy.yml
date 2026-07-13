@@ -4,8 +4,6 @@ name: Deploy Data Platform
 #   - Push to main → deploys all three VMs automatically
 #   - Manual trigger → choose which VM to deploy (useful for partial updates)
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       target:
