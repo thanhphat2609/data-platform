@@ -223,6 +223,30 @@ abfss://bronze@dataplatformstrorage.dfs.core.windows.net/
 The demo stack uses Azurite (the Azure Blob emulator). For real Azure, three values change across
 `bronze_ingestion.py` and `pipeline.yml` in both pipeline folders.
 
+### Azure Storage account requirements
+
+The pipelines write via the ADLS Gen2 DFS endpoint (`abfss://` → `dfs.core.windows.net`).
+This endpoint is incompatible with certain account-level features that Azure enables by default.
+
+**Hierarchical namespace (HNS) must be enabled** — required for the `abfss://` protocol.
+Enable it at account creation time (cannot be toggled after the fact).
+
+**The following features must be disabled** — they conflict with the DFS endpoint and cause
+`409 FileAlreadyExistsException` errors at runtime even when the path does not exist:
+
+| Feature | Where to disable |
+|---------|-----------------|
+| Soft delete for blobs | Azure Portal → Storage account → **Data management → Data protection** → uncheck *Enable soft delete for blobs* |
+| Soft delete for containers | Same page → uncheck *Enable soft delete for containers* |
+| Blob change feed | Same page → uncheck *Enable blob change feed* |
+
+Click **Save** after making any of these changes. No rebuild or restart required — the change
+takes effect on the next pipeline run.
+
+> These are on by default for new storage accounts created in the Azure Portal. The error surface
+> is a misleading `FileAlreadyExistsException` on a HEAD request — the real cause is always one
+> of the three settings above.
+
 ### What to replace
 
 | Location | Demo (Azurite) | Production |
