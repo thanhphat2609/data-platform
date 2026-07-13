@@ -4,17 +4,16 @@ libraries:
   - glob:
       include: bronze_ingestion.py
 
-# Delta metadata / checkpoint root — expanded by envsubst at container startup
-storage: "abfss://bronze@${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/sdp/ecommerce"
+# Local path for pipeline catalog metadata — container is ephemeral so no
+# need to persist this. Actual data locations are set per-view in bronze_ingestion.py.
+storage: "/tmp/sdp-pipeline/ecommerce"
 
 database: default
 
 configuration:
   spark.sql.shuffle.partitions: "4"
-
   spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
 
-  # Azure Blob Storage (ABFS — SharedKey auth)
-  # Key property must use the DFS endpoint suffix (.dfs.core.windows.net)
-  # Both the account name (in the key) and the key value are injected via envsubst
-  spark.hadoop.fs.azure.account.key.${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net: "${AZURE_STORAGE_ACCOUNT_KEY}"
+  # Azure Blob auth is configured dynamically in bronze_ingestion.py
+  # using AZURE_STORAGE_ACCOUNT_NAME / AZURE_STORAGE_ACCOUNT_KEY env vars.
+  # No account name or key is hardcoded here.

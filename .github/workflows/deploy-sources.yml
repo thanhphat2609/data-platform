@@ -1,0 +1,59 @@
+name: Deploy Demo Source Databases
+
+# Manual-only trigger — use this to start / restart the 3 demo source DB
+# containers on the master VM without triggering a full platform redeploy.
+#
+# Useful after:
+#   - VM reboot (containers stopped)
+#   - docker system prune (containers removed)
+#   - Demo reset (fresh seed data)
+#
+# Required secrets (shared with deploy.yml):
+#   GH_TOKEN, CTRL_VM_IP, VM_SSH_USER, CTRL_VM_SSH_KEY
+on:
+  workflow_dispatch:
+
+env:
+  REPO_PATH: ~/data-platform
+
+jobs:
+  deploy-sources:
+    name: "Source Databases (master VM)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH → git pull → docker compose up (source DBs only)
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          host:            ${{ secrets.CTRL_VM_IP }}
+          username:        ${{ secrets.VM_SSH_USER }}
+          key:             ${{ secrets.CTRL_VM_SSH_KEY }}
+          command_timeout: 5m
+          envs: GH_TOKEN
+          script: |
+            set -e
+
+            echo "── ensure docker ─────────────────────────"
+            if ! command -v docker &>/dev/null; then
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker "$USER"
+            fi
+            groups | grep -q '\bdocker\b' || docker() { sudo docker "$@"; }
+
+            cd ${{ env.REPO_PATH }}
+
+            echo "── git pull ──────────────────────────────"
+            git remote set-url origin "https://${GH_TOKEN}@github.com/thanhphat2669/data-platform.git"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "── start source databases ────────────────"
+            # Ports: postgres-crm → 5431  mysql-ecommerce → 3306  postgres-manage → 5433
+            # Credentials: admin / admin123 (hardcoded in demo/docker-compose.yml)
+            docker compose \
+              -f infrastructure/dagster/demo/docker-compose.yml \
+              up -d
+
+            echo "── status ────────────────────────────────"
+            docker compose -f infrastructure/dagster/demo/docker-compose.yml ps

@@ -163,24 +163,23 @@ deploy-worker1    deploy-worker2
 
 Each job: SSH → `git pull` → `docker build` → write `.env` from GitHub Secrets → `docker compose up`.
 
-**One-time setup:** add the following secrets in **Settings → Secrets and variables → Actions**:
+**One-time setup:** add the following 11 secrets in **Settings → Secrets and variables → Actions**:
 
-| Secret | Description |
-|--------|-------------|
-| `GH_TOKEN` | GitHub Personal Access Token (`repo` scope) — used by VMs to `git fetch` |
-| `CTRL_VM_IP` | Control VM IP |
-| `WORKER1_VM_IP` | Worker VM 1 IP |
-| `WORKER2_VM_IP` | Worker VM 2 IP |
-| `VM_SSH_USER` | SSH username (e.g. `azureuser`) |
-| `CTRL_VM_SSH_KEY` | Control VM private SSH key |
-| `WORKER1_VM_SSH_KEY` | Worker VM 1 private SSH key |
-| `WORKER2_VM_SSH_KEY` | Worker VM 2 private SSH key |
-| `DAGSTER_DB_PASSWORD` | Dagster metadata DB password |
-| `AZURE_STORAGE_ACCOUNT_NAME` | Azure Blob account name |
-| `AZURE_STORAGE_ACCOUNT_KEY` | Azure Blob account key |
-| `POSTGRES_CONNECTION_STRING` | CRM DB (worker-1) |
-| `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` | Ecommerce DB (worker-2) |
-| `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Manage DB (worker-2) |
+| # | Secret | Description |
+|---|--------|-------------|
+| 1 | `GH_TOKEN` | GitHub Personal Access Token (`repo` scope) — VMs use this to `git fetch` |
+| 2 | `CTRL_VM_IP` | Master / Control VM public IP |
+| 3 | `WORKER1_VM_IP` | Worker VM 1 public IP |
+| 4 | `WORKER2_VM_IP` | Worker VM 2 public IP |
+| 5 | `VM_SSH_USER` | SSH username on all VMs (e.g. `azureuser`) |
+| 6 | `CTRL_VM_SSH_KEY` | Control VM private SSH key |
+| 7 | `WORKER1_VM_SSH_KEY` | Worker VM 1 private SSH key |
+| 8 | `WORKER2_VM_SSH_KEY` | Worker VM 2 private SSH key |
+| 9 | `DAGSTER_DB_PASSWORD` | Dagster metadata DB password |
+| 10 | `AZURE_STORAGE_ACCOUNT_NAME` | Azure Blob Storage account name |
+| 11 | `AZURE_STORAGE_ACCOUNT_KEY` | Azure Blob Storage account key |
+
+> Source database credentials are **not secrets** — demo containers use fixed credentials (`admin` / `admin123`) on the master VM. The workflow constructs connection strings from `CTRL_VM_IP` + hardcoded demo credentials inline.
 
 Manual deploy to one VM: **Actions → Deploy Data Platform → Run workflow → choose target**.
 

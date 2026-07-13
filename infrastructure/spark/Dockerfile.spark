@@ -2,9 +2,6 @@ FROM apache/spark:4.1.2-python3
 
 USER root
 
-RUN apt-get update && apt-get install -y --no-install-recommends gettext-base && \
-    rm -rf /var/lib/apt/lists/*
-
 RUN pip install --upgrade --no-cache-dir "pyspark[pipelines]>=4.1.2" && \
     rm -rf /opt/spark/python/pyspark
 

@@ -26,12 +26,7 @@ def sdp_ecommerce_ingestion(context: AssetExecutionContext) -> None:
     run_docker_pipeline(
         context,
         image=_SDP_IMAGE,
-        cmd=[
-            "bash", "-c",
-            f"envsubst '${{AZURE_STORAGE_ACCOUNT_NAME}} ${{AZURE_STORAGE_ACCOUNT_KEY}}'"
-            f" < {_SPEC} > /tmp/pipeline.yml"
-            f" && spark-pipelines run --spec /tmp/pipeline.yml",
-        ],
+        cmd=["spark-pipelines", "run", "--spec", _SPEC],
         env_vars=_env(),
     )
 

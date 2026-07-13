@@ -23,30 +23,26 @@ env:
 # Required GitHub Secrets (Settings → Secrets and variables → Actions):
 #
 #   GitHub
-#     GH_TOKEN            Personal Access Token (repo scope) — for git fetch on VMs
+#     GH_TOKEN                Personal Access Token (repo scope) — git fetch on VMs
 #
 #   VM access
-#     CTRL_VM_IP          Private/public IP of the Control VM
-#     WORKER1_VM_IP       Private/public IP of Worker VM 1
-#     WORKER2_VM_IP       Private/public IP of Worker VM 2
-#     VM_SSH_USER         SSH username on all VMs (e.g. azureuser)
-#     CTRL_VM_SSH_KEY     Private SSH key for Control VM
-#     WORKER1_VM_SSH_KEY  Private SSH key for Worker VM 1
-#     WORKER2_VM_SSH_KEY  Private SSH key for Worker VM 2
+#     CTRL_VM_IP              Public IP of the Control / Master VM
+#     WORKER1_VM_IP           Public IP of Worker VM 1
+#     WORKER2_VM_IP           Public IP of Worker VM 2
+#     VM_SSH_USER             SSH username on all VMs (e.g. azureuser)
+#     CTRL_VM_SSH_KEY         Private SSH key for Control VM
+#     WORKER1_VM_SSH_KEY      Private SSH key for Worker VM 1
+#     WORKER2_VM_SSH_KEY      Private SSH key for Worker VM 2
 #
 #   Dagster
-#     DAGSTER_DB_PASSWORD  Postgres password for Dagster metadata DB
+#     DAGSTER_DB_PASSWORD     Postgres password for Dagster metadata DB
 #
 #   Azure Blob Storage
 #     AZURE_STORAGE_ACCOUNT_NAME
 #     AZURE_STORAGE_ACCOUNT_KEY
 #
-#   dlt source (Worker VM 1)
-#     POSTGRES_CONNECTION_STRING  e.g. postgresql://admin:pw@host:5432/crm
-#
-#   SDP sources (Worker VM 2)
-#     MYSQL_HOST / MYSQL_USER / MYSQL_PASSWORD
-#     POSTGRES_HOST / POSTGRES_USER / POSTGRES_PASSWORD
+# Source database credentials are NOT secrets — demo containers use fixed
+# credentials (admin / admin123) on the master VM, constructed inline below.
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
@@ -76,7 +72,6 @@ jobs:
           username:        ${{ secrets.VM_SSH_USER }}
           key:             ${{ secrets.CTRL_VM_SSH_KEY }}
           command_timeout: 10m
-          # Forward env vars to the remote shell (values never appear in script text)
           envs: GH_TOKEN,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,DLT_IMAGE,SDP_IMAGE
           script: |
             set -e
@@ -114,17 +109,6 @@ jobs:
             echo "── status ────────────────────────────────"
             docker compose -f infrastructure/dagster/control/docker-compose.yml ps
 
-            echo "── start source databases ────────────────"
-            # demo/docker-compose.yml contains ONLY the 3 source DBs (no Dagster
-            # services, no env var references) — start all services in the file
-            # Ports: postgres-crm → 5431, mysql-ecommerce → 3306, postgres-manage → 5433
-            docker compose \
-              -f infrastructure/dagster/demo/docker-compose.yml \
-              up -d
-
-            echo "── source DB status ──────────────────────"
-            docker compose -f infrastructure/dagster/demo/docker-compose.yml ps
-
   # ───────────────────────────────────────────────────────────────────────────
   # 2. Worker VM 1 — Celery worker for dlt pipelines (queue: worker-1)
   #    Depends on control being up (or already running if deploy-control skipped)
@@ -148,13 +132,12 @@ jobs:
           DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
           AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
-          POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
         with:
           host:            ${{ secrets.WORKER1_VM_IP }}
           username:        ${{ secrets.VM_SSH_USER }}
           key:             ${{ secrets.WORKER1_VM_SSH_KEY }}
           command_timeout: 15m
-          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,POSTGRES_CONNECTION_STRING
+          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY
           script: |
             set -e
 
@@ -190,7 +173,9 @@ jobs:
               printf 'DLT_IMAGE=%s\n'                  "dlt-pipeline:latest"
               printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
               printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
-              printf 'POSTGRES_CONNECTION_STRING=%s\n'  "$POSTGRES_CONNECTION_STRING"
+              # Demo CRM DB — fixed credentials, hosted on master VM port 5431
+              printf 'POSTGRES_CONNECTION_STRING=%s\n' \
+                "postgresql://admin:admin123@${CTRL_VM_IP}:5431/crm"
             } > infrastructure/dagster/worker/.env.worker1
 
             echo "── docker compose up ─────────────────────"
@@ -224,18 +209,12 @@ jobs:
           DAGSTER_DB_PASSWORD:        ${{ secrets.DAGSTER_DB_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
           AZURE_STORAGE_ACCOUNT_KEY:  ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
-          MYSQL_HOST:                 ${{ secrets.MYSQL_HOST }}
-          MYSQL_USER:                 ${{ secrets.MYSQL_USER }}
-          MYSQL_PASSWORD:             ${{ secrets.MYSQL_PASSWORD }}
-          POSTGRES_HOST:              ${{ secrets.POSTGRES_HOST }}
-          POSTGRES_USER:              ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD:          ${{ secrets.POSTGRES_PASSWORD }}
         with:
           host:            ${{ secrets.WORKER2_VM_IP }}
           username:        ${{ secrets.VM_SSH_USER }}
           key:             ${{ secrets.WORKER2_VM_SSH_KEY }}
           command_timeout: 20m
-          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,MYSQL_HOST,MYSQL_USER,MYSQL_PASSWORD,POSTGRES_HOST,POSTGRES_USER,POSTGRES_PASSWORD
+          envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY
           script: |
             set -e
 
@@ -268,19 +247,21 @@ jobs:
                 "postgresql://dagster:${DAGSTER_DB_PASSWORD}@${CTRL_VM_IP}:5432/dagster"
               printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
               printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
-              printf 'SDP_IMAGE=%s\n'                  "spark-pipeline:latest"
+              printf 'SDP_IMAGE=%s\n'             "spark-pipeline:latest"
               printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
               printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
-              printf 'MYSQL_HOST=%s\n'      "$MYSQL_HOST"
-              printf 'MYSQL_PORT=%s\n'      "3306"
-              printf 'MYSQL_DB=%s\n'        "ecommerce"
-              printf 'MYSQL_USER=%s\n'      "$MYSQL_USER"
-              printf 'MYSQL_PASSWORD=%s\n'  "$MYSQL_PASSWORD"
-              printf 'POSTGRES_HOST=%s\n'      "$POSTGRES_HOST"
-              printf 'POSTGRES_PORT=%s\n'      "5432"
+              # Demo ecommerce DB — fixed credentials, hosted on master VM port 3306
+              printf 'MYSQL_HOST=%s\n'     "$CTRL_VM_IP"
+              printf 'MYSQL_PORT=%s\n'     "3306"
+              printf 'MYSQL_DB=%s\n'       "ecommerce"
+              printf 'MYSQL_USER=%s\n'     "admin"
+              printf 'MYSQL_PASSWORD=%s\n' "admin123"
+              # Demo manage DB — fixed credentials, hosted on master VM port 5433
+              printf 'POSTGRES_HOST=%s\n'      "$CTRL_VM_IP"
+              printf 'POSTGRES_PORT=%s\n'      "5433"
               printf 'POSTGRES_MANAGE_DB=%s\n' "manage"
-              printf 'POSTGRES_USER=%s\n'      "$POSTGRES_USER"
-              printf 'POSTGRES_PASSWORD=%s\n'  "$POSTGRES_PASSWORD"
+              printf 'POSTGRES_USER=%s\n'      "admin"
+              printf 'POSTGRES_PASSWORD=%s\n'  "admin123"
             } > infrastructure/dagster/worker/.env.worker2
 
             echo "── docker compose up ─────────────────────"

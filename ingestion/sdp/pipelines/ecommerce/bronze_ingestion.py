@@ -33,9 +33,20 @@ _JDBC_OPTIONS = {
     "fetchsize": "10000",
 }
 
-_INGESTION_PATH = (
-    f"abfss://bronze@{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.dfs.core.windows.net/sdp/ecommerce"
-)
+_ACCOUNT_NAME   = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
+_ACCOUNT_KEY    = os.getenv("AZURE_STORAGE_ACCOUNT_KEY",  "")
+_INGESTION_PATH = f"abfss://bronze@{_ACCOUNT_NAME}.dfs.core.windows.net/sdp/ecommerce"
+
+# Set Azure Blob auth on the active Spark session's Hadoop config.
+# spark-pipelines creates the session before importing library modules, so
+# getActiveSession() is non-None here. We set the Hadoop key directly (no
+# spark.hadoop. prefix) because we're updating after session creation.
+_spark = SparkSession.getActiveSession()
+if _spark and _ACCOUNT_NAME and _ACCOUNT_KEY:
+    _spark.sparkContext._jsc.hadoopConfiguration().set(
+        f"fs.azure.account.key.{_ACCOUNT_NAME}.dfs.core.windows.net",
+        _ACCOUNT_KEY,
+    )
 
 _PARTITION_COLS = ["ingestion_date"]  # derived in _read_table(), not in MySQL source
 
