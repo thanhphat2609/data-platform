@@ -80,6 +80,15 @@ jobs:
           envs: GH_TOKEN,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,DLT_IMAGE,SDP_IMAGE
           script: |
             set -e
+
+            echo "── ensure docker ─────────────────────────"
+            if ! command -v docker &>/dev/null; then
+              echo "Docker not found — installing..."
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker "$USER"
+            fi
+            groups | grep -q '\bdocker\b' || docker() { sudo docker "$@"; }
+
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
@@ -137,6 +146,15 @@ jobs:
           envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,POSTGRES_CONNECTION_STRING
           script: |
             set -e
+
+            echo "── ensure docker ─────────────────────────"
+            if ! command -v docker &>/dev/null; then
+              echo "Docker not found — installing..."
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker "$USER"
+            fi
+            groups | grep -q '\bdocker\b' || docker() { sudo docker "$@"; }
+
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
@@ -209,6 +227,15 @@ jobs:
           envs: GH_TOKEN,CTRL_VM_IP,DAGSTER_DB_PASSWORD,AZURE_STORAGE_ACCOUNT_NAME,AZURE_STORAGE_ACCOUNT_KEY,MYSQL_HOST,MYSQL_USER,MYSQL_PASSWORD,POSTGRES_HOST,POSTGRES_USER,POSTGRES_PASSWORD
           script: |
             set -e
+
+            echo "── ensure docker ─────────────────────────"
+            if ! command -v docker &>/dev/null; then
+              echo "Docker not found — installing..."
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker "$USER"
+            fi
+            groups | grep -q '\bdocker\b' || docker() { sudo docker "$@"; }
+
             cd ${{ env.REPO_PATH }}
 
             echo "── git pull ──────────────────────────────"
