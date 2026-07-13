@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from dagster import AssetExecutionContext
 
@@ -34,7 +35,7 @@ def run_docker_pipeline(
     docker_cmd.append(image)
     docker_cmd.extend(cmd)
 
-    context.log.info("$ %s", " ".join(docker_cmd))
+    context.log.info("$ %s", shlex.join(docker_cmd))
 
     proc = subprocess.Popen(
         docker_cmd,
