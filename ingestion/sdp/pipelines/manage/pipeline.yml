@@ -2,7 +2,7 @@ name: sdp-manage-pipeline
 
 libraries:
   - glob:
-      include: bronze_ingestion.py
+      include: /opt/spark/pipeline/manage/bronze_ingestion.py
 
 # Local path for pipeline catalog metadata (ephemeral container — no persistence needed).
 # Actual Delta table locations are set per-view in bronze_ingestion.py.
