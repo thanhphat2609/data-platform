@@ -114,6 +114,17 @@ jobs:
             echo "── status ────────────────────────────────"
             docker compose -f infrastructure/dagster/control/docker-compose.yml ps
 
+            echo "── start source databases ────────────────"
+            # demo/docker-compose.yml contains ONLY the 3 source DBs (no Dagster
+            # services, no env var references) — start all services in the file
+            # Ports: postgres-crm → 5431, mysql-ecommerce → 3306, postgres-manage → 5433
+            docker compose \
+              -f infrastructure/dagster/demo/docker-compose.yml \
+              up -d
+
+            echo "── source DB status ──────────────────────"
+            docker compose -f infrastructure/dagster/demo/docker-compose.yml ps
+
   # ───────────────────────────────────────────────────────────────────────────
   # 2. Worker VM 1 — Celery worker for dlt pipelines (queue: worker-1)
   #    Depends on control being up (or already running if deploy-control skipped)

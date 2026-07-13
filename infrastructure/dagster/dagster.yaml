@@ -3,14 +3,6 @@ storage:
     postgres_url:
       env: DAGSTER_POSTGRES_URL
 
-execution:
-  config:
-    celery:
-      broker:
-        env: CELERY_BROKER_URL
-      backend:
-        env: CELERY_RESULT_BACKEND
-
 compute_logs:
   module: dagster_azure.blob.compute_log_manager
   class: AzureBlobComputeLogManager

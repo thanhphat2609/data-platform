@@ -1,6 +1,12 @@
 from dagster import Definitions
+from dagster_celery import celery_executor
 
 from pipelines import dlt_api, dlt_crm, sdp_ecommerce, sdp_manage
+
+_celery = celery_executor.configured({
+    "broker": {"env": "CELERY_BROKER_URL"},
+    "backend": {"env": "CELERY_RESULT_BACKEND"},
+})
 
 defs = Definitions(
     assets=[
@@ -21,4 +27,5 @@ defs = Definitions(
         sdp_ecommerce.schedule,
         sdp_manage.schedule,
     ],
+    executor=_celery,
 )
