@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: events
+    tables:
+      - name: exchange_rates
+        description: USD-based daily FX rates (frankfurter.app), landed by dlt (append-only time series).
+        meta:
+          external_location: "read_parquet('az://bronze/dlt/events/exchange_rates/*/*.parquet', hive_partitioning=true)"
+        columns:
+          - name: date
+            tests: [not_null]
+
+models:
+  - name: stg_events__exchange_rates
+    description: >
+      Daily FX rates, full history (no ingestion_date filter — append-only
+      source).
+    columns:
+      - name: date
+        tests: [not_null]

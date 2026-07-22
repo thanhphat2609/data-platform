@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: crm
+    tables:
+      - name: orders
+        description: Full-load orders snapshot from CRM PostgreSQL, landed by dlt.
+        meta:
+          external_location: "read_parquet('az://bronze/dlt/crm/orders/*/*.parquet', hive_partitioning=true)"
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+
+models:
+  - name: stg_crm__orders
+    description: Latest CRM orders snapshot (light rename/cast only).
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_crm__customers')
+              field: customer_id

@@ -1,0 +1,19 @@
+name: "transform"
+version: "1.0.0"
+config-version: 2
+
+profile: "transform"
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Default: staging models are views over external bronze files — nothing to
+# materialize, DuckDB reads Parquet/Delta straight off Blob on every query.
+# Individual models (intermediate/mart) override via inline {{ config(...) }}.
+models:
+  transform:
+    +materialized: view

@@ -6,6 +6,7 @@ Mono-repo for the full data engineering stack — ingestion, orchestration, and 
 [![dagster](https://img.shields.io/badge/dagster-latest-blue)]()
 [![dlt](https://img.shields.io/badge/dlt-0.5-green)]()
 [![delta-lake](https://img.shields.io/badge/delta--lake-4.0-teal)]()
+[![dbt](https://img.shields.io/badge/dbt-duckdb-orange)]()
 [![medallion](https://img.shields.io/badge/medallion--architecture-grey)]()
 
 ---
@@ -25,6 +26,16 @@ PostgreSQL CRM     REST APIs      MySQL ecommerce   PostgreSQL manage
                        │    Azure Blob  (bronze/)  │
                        │    Parquet / Delta Lake   │
                        └────────────┬─────────────┘
+                                    │
+                          ┌─────────▼─────────┐
+                          │  dbt + DuckDB      │   worker-2 queue, ephemeral
+                          │  (transformation/) │   container — see below
+                          └─────────┬──────────┘
+                                    │
+                       ┌────────────▼─────────────┐
+                       │  Azure Blob (silver/gold) │
+                       │        Parquet            │
+                       └───────────────────────────┘
 
                   ┌─────────────────────────────────────────┐
                   │                Dagster                   │
@@ -40,8 +51,8 @@ PostgreSQL CRM     REST APIs      MySQL ecommerce   PostgreSQL manage
 ```
 
 Each pipeline runs as a **short-lived Docker container** launched by Dagster via `docker run`.
-Celery routes each run to the worker subscribed to that pipeline's queue — dlt runs go to
-`worker-1`, SDP/Spark runs go to `worker-2`.
+Celery routes each run to the worker subscribed to that pipeline's queue — dlt + its dbt
+transform run on `worker-1`, SDP/Spark + its dbt transform run on `worker-2`.
 
 ---
 
@@ -51,8 +62,14 @@ Celery routes each run to the worker subscribed to that pipeline's queue — dlt
 |----------|-------|-------|----------------|
 | dlt CRM | `dlt-pipeline:latest` | `worker-1` | 01:00 |
 | dlt Events | `dlt-pipeline:latest` | `worker-1` | 01:30 |
+| dbt transform (crm, events) | `dbt-pipeline:latest` | `worker-1` | 02:00 |
 | Spark SDP ecommerce | `spark-pipeline:latest` | `worker-2` | 02:00 |
 | Spark SDP manage | `spark-pipeline:latest` | `worker-2` | 02:30 |
+| dbt transform (ecommerce, manage) | `dbt-pipeline:latest` | `worker-2` | 03:00 |
+
+The two dbt transform jobs run in parallel on their own workers — each transforms only the
+domains its worker's ingestion tool already landed to bronze, so it doesn't wait on the other
+tool's schedule. See [transformation/README.md](transformation/README.md).
 
 Spark SDP pipelines substitute Azure credentials into `pipeline.yml` at runtime via `envsubst`
 before calling `spark-pipelines run` — this is the only way to pass dynamic account names into
@@ -80,10 +97,19 @@ data-platform/
 │   ├── pipelines/                     One file per pipeline — asset + job + schedule co-located
 │   │   ├── dlt_crm.py                 op_tags: worker-1 | schedule: 01:00 ICT
 │   │   ├── dlt_api.py                 op_tags: worker-1 | schedule: 01:30 ICT
+│   │   ├── dbt_transform_dlt.py       op_tags: worker-1 | schedule: 02:00 ICT (crm, events)
 │   │   ├── sdp_ecommerce.py           op_tags: worker-2 | schedule: 02:00 ICT
-│   │   └── sdp_manage.py              op_tags: worker-2 | schedule: 02:30 ICT
+│   │   ├── sdp_manage.py              op_tags: worker-2 | schedule: 02:30 ICT
+│   │   └── dbt_transform_sdp.py       op_tags: worker-2 | schedule: 03:00 ICT (ecommerce, manage)
 │   └── src/
 │       └── docker_runner.py           Shared helper: docker run + log streaming into Dagster
+│
+├── transformation/                    ← dbt + DuckDB — bronze in, silver/gold out (no cluster)
+│   ├── dbt_project.yml
+│   ├── profiles/profiles.yml          DuckDB :memory:, azure/httpfs/delta extensions
+│   ├── macros/filter_ingestion_date.sql   Latest-partition-by-default date filter
+│   └── models/                        domain/ → entity/ → stg_/int_/mart_ (see transformation/README.md)
+│       ├── crm/ · events/ · ecommerce/ · manage/
 │
 └── infrastructure/
     ├── dagster/
@@ -97,9 +123,10 @@ data-platform/
     │   │   └── docker-compose.yml
     │   └── worker/                    PROD: worker VMs (one compose per worker)
     │       ├── docker-compose-worker1.yml   dlt queue
-    │       └── docker-compose-worker2.yml   SDP/Spark queue
+    │       └── docker-compose-worker2.yml   SDP/Spark + dbt/DuckDB queue
     ├── spark/                         Spark 4.1 image (Delta + JDBC + Azure + SDP specs + envsubst)
-    └── dlt/                           dlt runtime image (Python 3.11 + dlt + adlfs)
+    ├── dlt/                           dlt runtime image (Python 3.11 + dlt + adlfs)
+    └── dbt/                           dbt runtime image (Python 3.11 + dbt-core + dbt-duckdb)
 ```
 
 ---
@@ -213,6 +240,12 @@ Each job: SSH → `git pull` → `docker build` → write `.env` from GitHub Sec
 | Spark SDP ecommerce (MySQL) | `bronze/sdp/ecommerce/bronze_<table>/ingestion_date=YYYY-MM-DD/` | Delta |
 | Spark SDP manage (PostgreSQL) | `bronze/sdp/manage/bronze_<table>/ingestion_date=YYYY-MM-DD/` | Delta |
 
+## Gold output paths (example)
+
+| Model | Path | Format |
+|-------|------|--------|
+| `mart_ecommerce__fct_orders` | `gold/ecommerce/fct_orders/` | Parquet |
+
 ---
 
 ## Layer READMEs
@@ -222,6 +255,7 @@ Each job: SSH → `git pull` → `docker build` → write `.env` from GitHub Sec
 | Ingestion | [ingestion/README.md](ingestion/README.md) |
 | dlt pipelines | [ingestion/dlt/README.md](ingestion/dlt/README.md) |
 | Spark SDP pipelines | [ingestion/sdp/README.md](ingestion/sdp/README.md) |
+| Transformation | [transformation/README.md](transformation/README.md) |
 | Orchestration | [orchestration/README.md](orchestration/README.md) |
 | Infrastructure | [infrastructure/README.md](infrastructure/README.md) |
 | Demo walkthrough | [infrastructure/dagster/demo/DEMO.md](infrastructure/dagster/demo/DEMO.md) |

@@ -1,0 +1,26 @@
+# dbt-duckdb profile — one ephemeral DuckDB process per `dbt build` run.
+#
+# path is :memory: on purpose: this runs as a short-lived container (same
+# pattern as dlt-pipeline / spark-pipeline), so there is no catalog to persist
+# between runs. All durable state lives in Azure Blob — bronze in, silver/gold
+# out via the `external` materialization.
+#
+# Reuses the same AZURE_STORAGE_ACCOUNT_NAME / AZURE_STORAGE_ACCOUNT_KEY env
+# vars already used by dlt and Spark SDP — no separate credential format.
+transform:
+  target: prod
+  outputs:
+    prod:
+      type: duckdb
+      path: ":memory:"
+      threads: "{{ env_var('DBT_DUCKDB_THREADS', '4') }}"
+      extensions:
+        - httpfs
+        - azure
+        - delta
+      settings:
+        azure_storage_connection_string: >-
+          {{ 'DefaultEndpointsProtocol=https;AccountName=' ~
+             env_var('AZURE_STORAGE_ACCOUNT_NAME') ~ ';AccountKey=' ~
+             env_var('AZURE_STORAGE_ACCOUNT_KEY') ~
+             ';EndpointSuffix=core.windows.net' }}

@@ -1,14 +1,21 @@
-# PROD — Worker VM 1 (dlt pipelines)
+# PROD — Worker VM 1 (dlt pipelines + dbt/DuckDB transform)
 #
 # Deploy this on a dedicated Worker VM 1. This worker subscribes exclusively to
-# queue "worker-1" and executes dlt pipeline ops:
-#   - dlt_crm_ingestion  (PostgreSQL CRM → Azure Blob bronze/dlt/crm/)
-#   - dlt_api_ingestion  (REST APIs      → Azure Blob bronze/dlt/events/)
+# queue "worker-1" and executes dlt + dbt/DuckDB pipeline ops:
+#   - dlt_crm_ingestion   (PostgreSQL CRM → Azure Blob bronze/dlt/crm/)
+#   - dlt_api_ingestion   (REST APIs      → Azure Blob bronze/dlt/events/)
+#   - dbt_transform_dlt   (Azure Blob bronze/dlt/*  → Azure Blob silver via DuckDB)
+#
+# dbt_transform_dlt runs the crm + events domains here (in parallel with
+# dbt_transform_sdp on worker-2) so transform starts as soon as dlt's own
+# bronze is ready, without waiting on Spark SDP.
 #
 # Prerequisites on this VM:
 #   - Docker Engine with /var/run/docker.sock accessible
 #   - dlt-pipeline:latest image available locally
 #     Build:  docker build -t dlt-pipeline:latest -f infrastructure/dlt/Dockerfile .
+#   - dbt-pipeline:latest image available locally
+#     Build:  docker build -t dbt-pipeline:latest -f infrastructure/dbt/Dockerfile .
 #   - .env file (copy from .env.worker1.demo and fill in control VM addresses)
 #
 # Start the control plane first (infrastructure/dagster/control/docker-compose.yml),
@@ -48,8 +55,9 @@ services:
       CELERY_BROKER_URL:     ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
 
-      # ── dlt pipeline image ──────────────────────────────────────────────────
+      # ── dlt / dbt pipeline images ────────────────────────────────────────────
       DLT_IMAGE: ${DLT_IMAGE:-dlt-pipeline:latest}
+      DBT_IMAGE: ${DBT_IMAGE:-dbt-pipeline:latest}
 
       # ── Azure Blob — dlt destination ───────────────────────────────────────
       DESTINATION__FILESYSTEM__BUCKET_URL: az://bronze/dlt

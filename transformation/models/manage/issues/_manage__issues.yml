@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: manage
+    tables:
+      - name: issues
+        description: Issues from PostgreSQL manage DB, landed as Delta by Spark SDP.
+        meta:
+          external_location: "delta_scan('az://bronze/sdp/manage/bronze_issues')"
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+models:
+  - name: stg_manage__issues
+    description: Latest manage issues snapshot (light rename/cast only).
+    columns:
+      - name: issue_id
+        tests: [not_null, unique]
+      - name: project_id
+        tests:
+          - relationships:
+              to: ref('stg_manage__projects')
+              field: project_id

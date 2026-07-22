@@ -12,11 +12,11 @@ Distributed deployment across two VM types using Docker Compose.
 │  redis                 :6379  (broker)     │ ◄── all VMs connect here
 └────────────────────────────────────────────┘
 
-┌─── Worker VM-1 ─────────┐   ┌─── Worker VM-2 ─────────┐
-│  dagster-worker-1        │   │  dagster-worker-2        │
-│  queue: worker-1         │   │  queue: worker-2         │
-│  → sap assets            │   │  → sales assets          │
-└──────────────────────────┘   └──────────────────────────┘
+┌─── Worker VM-1 ─────────────────┐   ┌─── Worker VM-2 ─────────────┐
+│  dagster-worker-1                │   │  dagster-worker-2            │
+│  queue: worker-1                 │   │  queue: worker-2             │
+│  → sap assets + dbt/DuckDB       │   │  → sales assets + dbt/DuckDB │
+└───────────────────────────────────┘   └──────────────────────────────┘
 ```
 
 ## Folders

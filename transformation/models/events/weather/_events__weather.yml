@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: events
+    tables:
+      - name: openmeteo_hourly
+        description: Open-Meteo hourly forecast feed, landed by dlt (append-only time series).
+        meta:
+          external_location: "read_parquet('az://bronze/dlt/events/openmeteo_hourly/*/*.parquet', hive_partitioning=true)"
+        columns:
+          - name: datetime
+            tests: [not_null]
+
+models:
+  - name: stg_events__weather
+    description: >
+      Hourly weather observations, full history (no ingestion_date filter —
+      append-only source).
+    columns:
+      - name: datetime
+        tests: [not_null]

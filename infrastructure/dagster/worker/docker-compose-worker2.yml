@@ -1,14 +1,23 @@
-# PROD — Worker VM 2 (SDP / Spark pipelines)
+# PROD — Worker VM 2 (SDP / Spark pipelines + dbt/DuckDB transform)
 #
 # Deploy this on a dedicated Worker VM 2. This worker subscribes exclusively to
-# queue "worker-2" and executes Spark SDP pipeline ops:
+# queue "worker-2" and executes Spark SDP + dbt/DuckDB pipeline ops:
 #   - sdp_ecommerce_ingestion  (MySQL ecommerce    → Azure Blob bronze/sdp/ecommerce/)
 #   - sdp_manage_ingestion     (PostgreSQL manage  → Azure Blob bronze/sdp/manage/)
+#   - dbt_transform_sdp        (Azure Blob bronze/sdp/* → Azure Blob silver/gold via DuckDB)
+#
+# dbt_transform_sdp runs the ecommerce + manage domains here (in parallel with
+# dbt_transform_dlt on worker-1). dbt/DuckDB shares this worker rather than
+# getting its own VM — DuckDB scales vertically (cores + RAM), not by adding
+# nodes, so there's no distributed-compute reason to split it out further.
+# See transformation/README.md.
 #
 # Prerequisites on this VM:
 #   - Docker Engine with /var/run/docker.sock accessible
 #   - spark-pipeline:latest image available locally (build takes ~5 min)
 #     Build:  docker build -t spark-pipeline:latest -f infrastructure/spark/Dockerfile.spark .
+#   - dbt-pipeline:latest image available locally
+#     Build:  docker build -t dbt-pipeline:latest -f infrastructure/dbt/Dockerfile .
 #   - At least 6 GB RAM available for Spark containers (~3–4 GB per run)
 #   - .env file (copy from .env.worker2.demo and fill in control VM addresses)
 #
@@ -49,12 +58,14 @@ services:
       CELERY_BROKER_URL:     ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
 
-      # ── SDP pipeline image ──────────────────────────────────────────────────
+      # ── SDP / dbt pipeline images ───────────────────────────────────────────
       SDP_IMAGE: ${SDP_IMAGE:-spark-pipeline:latest}
+      DBT_IMAGE: ${DBT_IMAGE:-dbt-pipeline:latest}
 
-      # ── Azure Blob — SDP destination + Dagster compute logs ───────────────
+      # ── Azure Blob — SDP + dbt destination/source + Dagster compute logs ───
       AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       AZURE_STORAGE_ACCOUNT_KEY:  ${AZURE_STORAGE_ACCOUNT_KEY}
+      GOLD_ECOMMERCE_ORDERS_PATH: ${GOLD_ECOMMERCE_ORDERS_PATH:-az://gold/ecommerce/fct_orders}
 
       # ── SDP ecommerce source — real managed MySQL ───────────────────────────
       MYSQL_HOST:     ${MYSQL_HOST}

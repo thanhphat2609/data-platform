@@ -157,6 +157,9 @@ jobs:
             echo "── build dlt image (~2 min) ──────────────"
             docker build -t dlt-pipeline:latest -f infrastructure/dlt/Dockerfile .
 
+            echo "── build dbt image ───────────────────────"
+            docker build -t dbt-pipeline:latest -f infrastructure/dbt/Dockerfile .
+
             echo "── build dagster image ───────────────────"
             docker build \
               -t dagster-worker:latest \
@@ -169,6 +172,7 @@ jobs:
               printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
               printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
               printf 'DLT_IMAGE=%s\n'                  "dlt-pipeline:latest"
+              printf 'DBT_IMAGE=%s\n'                  "dbt-pipeline:latest"
               printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
               printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
               # Demo CRM DB — fixed credentials, hosted on master VM port 5431
@@ -234,6 +238,9 @@ jobs:
             echo "── build spark image (~5 min) ────────────"
             docker build -t spark-pipeline:latest -f infrastructure/spark/Dockerfile.spark .
 
+            echo "── build dbt image ───────────────────────"
+            docker build -t dbt-pipeline:latest -f infrastructure/dbt/Dockerfile .
+
             echo "── build dagster image ───────────────────"
             docker build \
               -t dagster-worker:latest \
@@ -246,6 +253,7 @@ jobs:
               printf 'CELERY_BROKER_URL=%s\n'     "redis://${CTRL_VM_IP}:6379/0"
               printf 'CELERY_RESULT_BACKEND=%s\n' "redis://${CTRL_VM_IP}:6379/0"
               printf 'SDP_IMAGE=%s\n'             "spark-pipeline:latest"
+              printf 'DBT_IMAGE=%s\n'             "dbt-pipeline:latest"
               printf 'AZURE_STORAGE_ACCOUNT_NAME=%s\n' "$AZURE_STORAGE_ACCOUNT_NAME"
               printf 'AZURE_STORAGE_ACCOUNT_KEY=%s\n'  "$AZURE_STORAGE_ACCOUNT_KEY"
               # Demo ecommerce DB — fixed credentials, hosted on master VM port 3306

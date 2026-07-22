@@ -1,0 +1,8 @@
+# dbt
+target/
+dbt_packages/
+logs/
+
+# DuckDB (local runs only — prod path is :memory:)
+*.duckdb
+*.duckdb.wal

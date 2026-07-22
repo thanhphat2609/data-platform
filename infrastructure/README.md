@@ -9,6 +9,7 @@ Deployment configs for all platform services.
 | [`dagster/`](dagster/README.md) | Dagster webserver, daemon, and Celery workers via Docker Compose |
 | [`spark/`](spark/README.md) | Spark 4.1 runtime image — Delta Lake, Azure Blob, JDBC drivers, SDP pipeline specs |
 | [`dlt/`](dlt/README.md) | dlt runtime image — Python 3.11, dlt, psycopg2, pipeline scripts |
+| [`dbt/`](dbt/README.md) | dbt-core + dbt-duckdb runtime image — reads bronze, writes silver/gold |
 
 ## Architecture
 
@@ -24,17 +25,26 @@ Deployment configs for all platform services.
 └────────────────────────────────────────────┘
          │ docker run dlt-pipeline:latest ...
          │ docker run spark-pipeline:latest ...
+         │ docker run dbt-pipeline:latest ...
          ▼
 ┌─── Pipeline containers (ephemeral) ────────┐
 │  dlt-pipeline:latest                        │  ← runs, writes to Azure Blob, exits
 │  spark-pipeline:latest                      │  ← runs, writes to Azure Blob, exits
+│  dbt-pipeline:latest                        │  ← runs, reads/writes Azure Blob, exits
 └─────────────────────────────────────────────┘
 
-┌─── Worker VM-1 ─────────┐   ┌─── Worker VM-2 ─────────┐
-│  dagster-worker-1        │   │  dagster-worker-2        │
-│  queue: worker-1  (SAP)  │   │  queue: worker-2 (Sales) │
-└──────────────────────────┘   └──────────────────────────┘
+┌─── Worker VM-1 ─────────────────┐   ┌─── Worker VM-2 ─────────────┐
+│  dagster-worker-1                │   │  dagster-worker-2            │
+│  queue: worker-1                 │   │  queue: worker-2             │
+│  dlt + dbt/DuckDB                │   │  Spark SDP + dbt/DuckDB      │
+│  (crm, events domains)           │   │  (ecommerce, manage domains) │
+└───────────────────────────────────┘   └──────────────────────────────┘
 ```
+
+dbt/DuckDB runs on the existing workers rather than a dedicated VM — DuckDB scales vertically
+(cores + RAM on one box), not by adding nodes, so there's no distributed-compute reason to
+stand up a third worker for it. Each worker transforms the domains its own ingestion tool
+already landed, in parallel. See [transformation/README.md](../transformation/README.md).
 
 ## Pipeline images
 
@@ -45,6 +55,7 @@ The command passed to `docker run` selects which pipeline to execute.
 |-------|-----------|------------|
 | `dlt-pipeline:latest` | `infrastructure/dlt/Dockerfile` | repo root as context |
 | `spark-pipeline:latest` | `infrastructure/spark/Dockerfile.spark` | repo root as context |
+| `dbt-pipeline:latest` | `infrastructure/dbt/Dockerfile` | repo root as context |
 | `dagster:latest` | `infrastructure/dagster/Dockerfile` | repo root as context |
 
 ### Build all images
@@ -53,6 +64,7 @@ The command passed to `docker run` selects which pipeline to execute.
 # From repo root
 docker build -f infrastructure/dlt/Dockerfile           -t dlt-pipeline:latest    .
 docker build -f infrastructure/spark/Dockerfile.spark   -t spark-pipeline:latest  .
+docker build -f infrastructure/dbt/Dockerfile           -t dbt-pipeline:latest    .
 docker build -f infrastructure/dagster/Dockerfile       -t dagster:latest         .
 ```
 
@@ -67,10 +79,11 @@ docker push myregistry.azurecr.io/dlt-pipeline:v1.0
 docker push myregistry.azurecr.io/spark-pipeline:v1.0
 ```
 
-Then set `DLT_IMAGE` and `SDP_IMAGE` env vars in your Compose file or `.env`:
+Then set `DLT_IMAGE`, `SDP_IMAGE`, and `DBT_IMAGE` env vars in your Compose file or `.env`:
 ```
 DLT_IMAGE=myregistry.azurecr.io/dlt-pipeline:v1.0
 SDP_IMAGE=myregistry.azurecr.io/spark-pipeline:v1.0
+DBT_IMAGE=myregistry.azurecr.io/dbt-pipeline:v1.0
 ```
 
 ## Quick reference
