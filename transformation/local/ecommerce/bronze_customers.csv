@@ -1,0 +1,6 @@
+id,name,email,phone,address,created_at,updated_at,ingestion_date
+1,Alice Nguyen,alice@example.com,+84901111111,"123 Le Loi, Ho Chi Minh City",2025-01-10 08:00:00,2026-07-01 09:00:00,2026-07-28
+2,Bob Tran,bob@example.com,+84902222222,"456 Nguyen Hue, Ho Chi Minh City",2025-02-05 09:00:00,2026-07-05 10:00:00,2026-07-28
+3,Carol Pham,carol@example.com,+84903333333,"789 Dong Khoi, Ho Chi Minh City",2025-03-12 10:00:00,2026-07-10 11:00:00,2026-07-28
+4,David Le,david@example.com,+84904444444,"321 Hai Ba Trung, Hanoi",2025-04-20 11:00:00,2026-07-15 12:00:00,2026-07-28
+5,Eva Hoang,eva@example.com,+84905555555,"654 Tran Hung Dao, Hanoi",2025-05-18 12:00:00,2026-07-20 13:00:00,2026-07-28

@@ -1,0 +1,6 @@
+id,project_id,title,description,reporter_id,assignee_id,status,severity,created_at,ingestion_date
+1,1,JDBC read timeout on large tables,Orders table >1M rows causes timeout,3,2,open,high,2025-03-01 10:00:00,2026-07-28
+2,1,Schema drift on customers table,email column changed to nullable,2,1,resolved,medium,2025-03-15 11:00:00,2026-07-28
+3,2,Login fails on Android 12,Token refresh returns 401,4,3,open,critical,2025-04-01 09:00:00,2026-07-28
+4,2,Dark mode crashes on iOS,App crashes when switching theme,5,3,open,high,2025-04-10 14:00:00,2026-07-28
+5,3,Rate limit not applied to /health,/health endpoint bypasses rate limit,1,4,open,low,2025-05-01 08:00:00,2026-07-28

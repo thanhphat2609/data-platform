@@ -1,0 +1,4 @@
+id,name,description,owner_id,status,start_date,end_date,created_at,ingestion_date
+1,Data Platform v2,Next-gen lakehouse ingestion layer,1,active,2025-01-01,2025-06-30,2025-01-01 08:00:00,2026-07-28
+2,Mobile App 3.0,Cross-platform mobile rewrite,2,active,2025-02-01,2025-08-31,2025-02-01 08:00:00,2026-07-28
+3,API Gateway,Centralised API management layer,1,planning,2025-04-01,2025-10-31,2025-04-01 08:00:00,2026-07-28

@@ -1,0 +1,9 @@
+id,project_id,author_id,entity_type,entity_id,body,created_at,ingestion_date
+1,1,2,issue,1,Reproduced. Root cause is fetchsize=10000 with no query partitioning.,2025-03-02 09:00:00,2026-07-28
+2,1,1,issue,1,Fix: add numPartitions + partitionColumn options to JDBC read.,2025-03-03 10:00:00,2026-07-28
+3,1,3,task,3,Started dedup logic. Using row_number() over partition by PK.,2025-03-10 11:00:00,2026-07-28
+4,2,3,issue,3,Found the bug — refresh token is not being stored in secure storage.,2025-04-02 09:00:00,2026-07-28
+5,2,4,issue,4,Cannot reproduce on iOS 17. Likely iOS 16 specific.,2025-04-12 14:00:00,2026-07-28
+6,3,1,task,7,Going with sliding window counter stored in Redis.,2025-05-02 08:00:00,2026-07-28
+7,1,2,task,2,All schemas reviewed and merged. ingestion_date added as partition col.,2025-03-16 09:00:00,2026-07-28
+8,3,4,issue,5,/health should always be excluded from rate limits by convention.,2025-05-05 10:00:00,2026-07-28

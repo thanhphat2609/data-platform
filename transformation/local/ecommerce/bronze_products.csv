@@ -1,0 +1,9 @@
+id,category_id,name,description,price,stock_qty,created_at,updated_at,ingestion_date
+1,4,iPhone 15 Pro,Apple flagship smartphone,999.00,50,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+2,4,Samsung Galaxy S24,Android flagship smartphone,849.00,75,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+3,5,MacBook Pro 14",Apple M3 laptop,1999.00,30,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+4,5,Dell XPS 15,Intel Core i9 laptop,1499.00,40,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+5,2,Levi 501 Jeans,Classic blue denim jeans,89.99,200,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+6,3,Clean Code,Robert C. Martin,45.00,150,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+7,3,The Pragmatic Programmer,Hunt & Thomas,42.00,120,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+8,2,Nike Air Max,Running shoes,129.99,80,2025-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28

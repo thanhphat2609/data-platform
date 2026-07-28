@@ -1,0 +1,9 @@
+id,project_id,title,description,assignee_id,status,priority,due_date,created_at,ingestion_date
+1,1,Set up Spark SDP pipeline,Configure PySpark 4.1 declarative pipelines,1,done,high,2025-02-28,2025-01-15 09:00:00,2026-07-28
+2,1,Add Bronze schema files,Define StructType for all source tables,2,done,high,2025-03-15,2025-01-20 09:00:00,2026-07-28
+3,1,Implement Silver layer,Cleanse and deduplicate bronze tables,3,in_progress,medium,2025-04-30,2025-02-01 09:00:00,2026-07-28
+4,1,Set up Airflow DAGs,Schedule bronze and silver pipeline runs,1,open,high,2025-05-15,2025-02-10 09:00:00,2026-07-28
+5,2,Design app architecture,Define screens and data models,2,done,high,2025-03-01,2025-02-01 09:00:00,2026-07-28
+6,2,Implement auth flow,OAuth2 login with refresh tokens,3,in_progress,high,2025-04-15,2025-02-15 09:00:00,2026-07-28
+7,3,Rate limiting design,Design token bucket rate limiter,4,open,medium,2025-05-01,2025-04-01 09:00:00,2026-07-28
+8,3,Auth middleware,JWT validation middleware,4,open,high,2025-05-15,2025-04-05 09:00:00,2026-07-28

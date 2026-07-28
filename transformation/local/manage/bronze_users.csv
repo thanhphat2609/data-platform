@@ -1,0 +1,6 @@
+id,username,email,role,created_at,ingestion_date
+1,phat.nguyen,phat@company.com,admin,2025-01-01 08:00:00,2026-07-28
+2,alice.tran,alice@company.com,lead,2025-01-05 09:00:00,2026-07-28
+3,bob.le,bob@company.com,member,2025-01-10 10:00:00,2026-07-28
+4,carol.pham,carol@company.com,member,2025-02-01 11:00:00,2026-07-28
+5,david.hoang,david@company.com,viewer,2025-02-15 12:00:00,2026-07-28

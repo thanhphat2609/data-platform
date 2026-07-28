@@ -1,0 +1,6 @@
+id,name,description,price,stock_qty,created_at,updated_at,ingestion_date
+301,Enterprise CRM License,Annual SaaS CRM subscription,2500.00,999,2024-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+302,Support Package Basic,12-month email support,750.00,999,2024-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+303,Support Package Pro,12-month priority phone support,1200.00,999,2024-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+304,CRM Mobile Add-on,Mobile app access per user/year,89.99,999,2024-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28
+305,Analytics Dashboard,Advanced reporting module,420.00,999,2024-01-01 00:00:00,2026-07-01 00:00:00,2026-07-28

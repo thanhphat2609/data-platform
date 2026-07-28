@@ -1,0 +1,6 @@
+id,name,email,phone,address,created_at,updated_at,ingestion_date
+101,Minh Vo,minh@crm.com,+84911000001,"10 Ly Thuong Kiet, Hanoi",2024-06-01 08:00:00,2026-07-10 08:00:00,2026-07-28
+102,Lan Nguyen,lan@crm.com,+84911000002,"22 Dinh Tien Hoang, Hanoi",2024-07-15 09:00:00,2026-07-12 09:00:00,2026-07-28
+103,Tuan Pham,tuan@crm.com,+84911000003,"35 Ba Trieu, Hanoi",2024-08-20 10:00:00,2026-07-14 10:00:00,2026-07-28
+104,Huong Le,huong@crm.com,+84911000004,"48 Hang Bai, Hanoi",2024-09-05 11:00:00,2026-07-16 11:00:00,2026-07-28
+105,Nam Tran,nam@crm.com,+84911000005,"61 Trang Tien, Hanoi",2024-10-10 12:00:00,2026-07-18 12:00:00,2026-07-28

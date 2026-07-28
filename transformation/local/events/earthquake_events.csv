@@ -1,0 +1,6 @@
+id,time,magnitude,place,type,longitude,latitude,depth_km,status,tsunami,significance,ingestion_date
+us7000l1ab,2026-07-28T01:22:14.000Z,5.2,"45 km NW of Manila, Philippines",earthquake,120.87,15.12,10.0,reviewed,0,432,2026-07-28
+us7000l1cd,2026-07-28T03:45:00.000Z,3.8,"12 km SE of Tokyo, Japan",earthquake,139.76,35.68,8.0,reviewed,0,211,2026-07-28
+us7000l1ef,2026-07-27T22:10:30.000Z,6.1,"150 km SW of Honiara, Solomon Islands",earthquake,159.23,-9.87,35.0,reviewed,1,684,2026-07-28
+us7000l1gh,2026-07-27T18:55:45.000Z,4.5,"30 km N of Kathmandu, Nepal",earthquake,85.32,28.01,15.0,reviewed,0,312,2026-07-28
+us7000l1ij,2026-07-27T14:30:20.000Z,2.9,"5 km E of Napa, California",earthquake,-122.27,38.30,5.0,automatic,0,128,2026-07-28
