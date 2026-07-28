@@ -1,0 +1,53 @@
+# dbt-duckdb profile — DuckDB as compute engine, file-based in both targets.
+#
+# Why file-based (not :memory:)?
+#   dbt uses multiple threads — each thread opens its own connection.
+#   With :memory:, every connection gets an isolated empty database.
+#   A file path gives all threads a shared database.
+#
+# Why on-run-start (not pre_init_sql)?
+#   pre_init_sql runs on a separate init cursor; its DDL is not visible to
+#   the thread connections that run tests and models.
+#   on-run-start fires before threads spin up → macros/init_bronze_views.sql
+#   creates all schema-qualified VIEWs over bronze sources.
+#
+# Commands (run from transformation/):
+#
+#   Dev  — dlt pipeline:  dbt build --profiles-dir . --select crm events
+#   Dev  — SDP pipeline:  dbt build --profiles-dir . --select ecommerce manage
+#
+#   Prod — dlt pipeline:  dbt build --profiles-dir . --target prod --select crm events
+#   Prod — SDP pipeline:  dbt build --profiles-dir . --target prod --select ecommerce manage
+#
+transform:
+  target: dev
+  outputs:
+
+    # ── Local development ────────────────────────────────────────────────────
+    # Sources read from local/ CSV files — VIEWs created by init_bronze_views().
+    # Silver output → local/silver/{domain}/{model}/  (dest_location macro)
+    dev:
+      type: duckdb
+      path: "warehouse/dev.duckdb"
+      threads: 4
+
+    # ── Production (Azure Blob) ──────────────────────────────────────────────
+    # Sources read from Azure Blob — VIEWs created by init_bronze_views().
+    # Silver output → az://silver/{domain}/{model}/  (dest_location macro)
+    # Requires: AZURE_STORAGE_ACCOUNT_NAME + AZURE_STORAGE_ACCOUNT_KEY
+    #
+    # warehouse/prod.duckdb is ephemeral — created fresh in each container run.
+    prod:
+      type: duckdb
+      path: "warehouse/prod.duckdb"
+      threads: "{{ env_var('DBT_DUCKDB_THREADS', '4') }}"
+      extensions:
+        - httpfs
+        - azure
+        - delta
+      settings:
+        azure_storage_connection_string: >-
+          {{ 'DefaultEndpointsProtocol=https;AccountName=' ~
+             env_var('AZURE_STORAGE_ACCOUNT_NAME') ~ ';AccountKey=' ~
+             env_var('AZURE_STORAGE_ACCOUNT_KEY') ~
+             ';EndpointSuffix=core.windows.net' }}

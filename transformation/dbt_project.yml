@@ -14,6 +14,9 @@ clean-targets:
 # Default: staging models are views over external bronze files — nothing to
 # materialize, DuckDB reads Parquet/Delta straight off Blob on every query.
 # Individual models (intermediate/mart) override via inline {{ config(...) }}.
+on-run-start:
+  - "{{ init_bronze_views() }}"
+
 models:
   transform:
     +materialized: view

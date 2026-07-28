@@ -8,11 +8,7 @@ _DBT_IMAGE = os.getenv("DBT_IMAGE", "dbt-pipeline:latest")
 
 
 def _env() -> dict[str, str]:
-    keys = [
-        "AZURE_STORAGE_ACCOUNT_NAME",
-        "AZURE_STORAGE_ACCOUNT_KEY",
-        "GOLD_ECOMMERCE_ORDERS_PATH",
-    ]
+    keys = ["AZURE_STORAGE_ACCOUNT_NAME", "AZURE_STORAGE_ACCOUNT_KEY"]
     return {k: v for k in keys if (v := os.getenv(k))}
 
 
@@ -26,13 +22,13 @@ def _env() -> dict[str, str]:
     key_prefix=["dbt"],
     group_name="dbt_transform_sdp",
     op_tags={"dagster-celery/queue": "worker-2"},
-    description="dbt build --select ecommerce manage: bronze (Delta on Azure Blob) -> staging/intermediate/mart via DuckDB",
+    description="dbt build --select ecommerce manage: bronze (Delta on Azure Blob) -> staging -> silver (Parquet) via DuckDB",
 )
 def dbt_transform_sdp(context: AssetExecutionContext) -> None:
     run_docker_pipeline(
         context,
         image=_DBT_IMAGE,
-        cmd=["dbt", "build", "--profiles-dir", "/app/profiles", "--select", "ecommerce", "manage"],
+        cmd=["dbt", "build", "--profiles-dir", "/app", "--target", "prod", "--select", "ecommerce", "manage"],
         env_vars=_env(),
     )
 

@@ -1,4 +1,8 @@
-{{ config(materialized='table') }}
+{{ config(
+    materialized = 'external',
+    location     = 'local/silver/ecommerce/orders',
+    format       = 'parquet'
+) }}
 
 with orders as (
     select * from {{ ref('stg_ecommerce__orders') }}

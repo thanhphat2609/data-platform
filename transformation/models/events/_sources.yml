@@ -1,0 +1,62 @@
+version: 2
+
+# Events — REST API sources, landed as Hive-partitioned Parquet by dlt (append-only).
+# Prod path: az://bronze/dlt/events/{table}/ingestion_date=YYYY-MM-DD/*.parquet
+# Dev path:  local/events/{table}.csv
+#
+# Source resolution: pre_init_sql in profiles.yml creates schema-qualified VIEWs
+# at connection startup (events.earthquake_events, events.exchange_rates, events.openmeteo_hourly).
+# dbt resolves {{ source('events', 'earthquake_events') }} → events.earthquake_events automatically.
+#
+# Append-only: staging models do NOT call filter_ingestion_date() —
+# every partition is a unique historical batch, not a replace-mode snapshot.
+
+sources:
+  - name: events
+    schema: events
+    description: Append-only time-series feeds from external APIs, landed as Parquet by dlt.
+    tables:
+      - name: earthquake_events
+        description: USGS earthquake feed (append-only time series).
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: exchange_rates
+        description: USD-based daily FX rates from frankfurter.app (append-only).
+        columns:
+          - name: date
+            tests: [not_null]
+
+      - name: openmeteo_hourly
+        description: Open-Meteo hourly weather forecast (append-only).
+        columns:
+          - name: datetime
+            tests: [not_null]
+
+models:
+  - name: stg_events__earthquakes
+    description: Earthquake events, full history (no ingestion_date filter — append-only).
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+
+  - name: stg_events__exchange_rates
+    description: Daily FX rates, full history (no ingestion_date filter — append-only).
+    columns:
+      - name: date
+        tests: [not_null]
+
+  - name: stg_events__weather
+    description: Hourly weather observations, full history (no ingestion_date filter — append-only).
+    columns:
+      - name: datetime
+        tests: [not_null]
+
+  - name: int_events__earthquakes
+    description: >
+      Earthquakes enriched with magnitude category (micro/minor/light/moderate/strong/major/great).
+      Written to silver (dev: local/silver/events/int_earthquakes / prod: az://silver/events/int_earthquakes).
+    columns:
+      - name: event_id
+        tests: [not_null, unique]

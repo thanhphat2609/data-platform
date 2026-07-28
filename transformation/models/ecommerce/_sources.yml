@@ -1,0 +1,107 @@
+version: 2
+
+# Ecommerce — MySQL, landed as Delta tables by Spark SDP.
+# Prod path: az://bronze/sdp/ecommerce/bronze_{table}  (Delta format)
+# Dev path:  local/ecommerce/bronze_{table}.csv
+#
+# Source resolution: pre_init_sql in profiles.yml creates schema-qualified VIEWs
+# at connection startup (ecommerce.customers, ecommerce.orders, etc.).
+# dbt resolves {{ source('ecommerce', 'customers') }} → ecommerce.customers automatically.
+
+sources:
+  - name: ecommerce
+    schema: ecommerce
+    description: Ecommerce data from MySQL, landed as Delta tables by Spark SDP.
+    tables:
+      - name: customers
+        description: Customers snapshot from MySQL ecommerce DB.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: email
+            tests: [not_null]
+
+      - name: categories
+        description: Product categories snapshot from MySQL ecommerce DB.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: products
+        description: Products snapshot from MySQL ecommerce DB.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: orders
+        description: Orders snapshot from MySQL ecommerce DB.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+
+      - name: order_items
+        description: Order line items from MySQL ecommerce DB.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+models:
+  - name: stg_ecommerce__customers
+    description: Latest ecommerce customers snapshot (light rename/cast only).
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+
+  - name: stg_ecommerce__categories
+    description: Latest ecommerce categories snapshot (light rename/cast only).
+    columns:
+      - name: category_id
+        tests: [not_null, unique]
+
+  - name: stg_ecommerce__products
+    description: Latest ecommerce products snapshot (light rename/cast only).
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+      - name: category_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_ecommerce__categories')
+                field: category_id
+
+  - name: stg_ecommerce__orders
+    description: Latest ecommerce orders snapshot (light rename/cast only).
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ecommerce__customers')
+                field: customer_id
+
+  - name: stg_ecommerce__order_items
+    description: Latest ecommerce order line items snapshot (light rename/cast only).
+    columns:
+      - name: order_item_id
+        tests: [not_null, unique]
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ecommerce__orders')
+                field: order_id
+
+  - name: int_ecommerce__orders
+    description: >
+      Orders enriched with rolled-up line-item totals.
+      Written to silver (dev: local/silver/ecommerce/int_orders / prod: az://silver/ecommerce/int_orders).
+    columns:
+      - name: order_id
+        tests: [not_null, unique]

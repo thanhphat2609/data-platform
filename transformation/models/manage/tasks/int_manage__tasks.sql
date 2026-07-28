@@ -1,0 +1,29 @@
+{{ config(
+    materialized = 'external',
+    location     = 'local/silver/manage/tasks',
+    format       = 'parquet'
+) }}
+
+with tasks as (
+    select * from {{ ref('stg_manage__tasks') }}
+),
+
+projects as (
+    select * from {{ ref('stg_manage__projects') }}
+)
+
+select
+    tasks.task_id,
+    tasks.project_id,
+    projects.project_name,
+    projects.project_status,
+    tasks.title       as task_title,
+    tasks.description,
+    tasks.assignee_id,
+    tasks.task_status,
+    tasks.priority,
+    tasks.due_date,
+    tasks.created_at,
+    tasks.ingestion_date
+from tasks
+left join projects using (project_id)

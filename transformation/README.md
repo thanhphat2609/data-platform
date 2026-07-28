@@ -90,14 +90,65 @@ where {{ filter_ingestion_date('ingestion_date') }}
 
 ## Running locally
 
+## Data flow
+
+```
+Bronze (Azure Blob / local CSV)
+   │  source_location() macro → read_parquet / delta_scan / read_csv
+   ▼
+Staging  (DuckDB views — in memory only, no storage)
+   │  DuckDB computes
+   ▼
+Intermediate  → Silver  (external Parquet, via dest_location() macro)
+                  dev:  local/silver/{domain}/{model}/
+                  prod: az://silver/{domain}/{model}/
+```
+
+DuckDB is the compute engine in both environments (`path: ":memory:"`). Nothing
+persists in DuckDB — all durable output is Parquet written by the `external`
+materialization. Mart models (→ gold) are added only when real business logic exists.
+
+## Running locally
+
+Both targets live in [`profiles.yml`](profiles.yml) at the project root.
+
+| Target | Credentials | Sources | Silver output |
+|--------|-------------|---------|---------------|
+| `dev` (default) | none | `local/` CSV | `local/silver/` |
+| `prod` | `AZURE_STORAGE_ACCOUNT_NAME` + `AZURE_STORAGE_ACCOUNT_KEY` | Azure Blob | `az://silver/` |
+
+### Dev commands (match orchestration split)
+
 ```bash
 cd transformation
 pip install -r requirements.txt
-AZURE_STORAGE_ACCOUNT_NAME=<account> AZURE_STORAGE_ACCOUNT_KEY=<key> \
-  dbt build --profiles-dir profiles
+
+# dlt domains (crm, events) — mirrors dbt_transform_dlt Dagster asset
+dbt build --profiles-dir . --select crm events
+
+# SDP domains (ecommerce, manage) — mirrors dbt_transform_sdp Dagster asset
+dbt build --profiles-dir . --select ecommerce manage
 ```
 
-Or via the container image — see [infrastructure/dbt/README.md](../infrastructure/dbt/README.md).
+Inspect silver output after a run:
+
+```bash
+duckdb -c "SELECT * FROM 'local/silver/ecommerce/int_orders/' LIMIT 10"
+```
+
+### Prod commands
+
+```bash
+cd transformation
+AZURE_STORAGE_ACCOUNT_NAME=<account> AZURE_STORAGE_ACCOUNT_KEY=<key> \
+  dbt build --profiles-dir . --target prod --select crm events
+
+AZURE_STORAGE_ACCOUNT_NAME=<account> AZURE_STORAGE_ACCOUNT_KEY=<key> \
+  dbt build --profiles-dir . --target prod --select ecommerce manage
+```
+
+Or via the container image (Dagster runs this automatically) — see
+[infrastructure/dbt/README.md](../infrastructure/dbt/README.md).
 
 ## Orchestration
 

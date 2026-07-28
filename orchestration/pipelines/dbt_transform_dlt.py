@@ -26,7 +26,7 @@ def dbt_transform_dlt(context: AssetExecutionContext) -> None:
     run_docker_pipeline(
         context,
         image=_DBT_IMAGE,
-        cmd=["dbt", "build", "--profiles-dir", "/app/profiles", "--select", "crm", "events"],
+        cmd=["dbt", "build", "--profiles-dir", "/app", "--target", "prod", "--select", "crm", "events"],
         env_vars=_env(),
     )
 

@@ -1,0 +1,72 @@
+version: 2
+
+# CRM — PostgreSQL, landed as Hive-partitioned Parquet by dlt.
+# Prod path: az://bronze/dlt/crm/{table}/ingestion_date=YYYY-MM-DD/*.parquet
+# Dev path:  local/crm/{table}.csv
+#
+# Source resolution: pre_init_sql in profiles.yml creates schema-qualified VIEWs
+# at connection startup (crm.customers, crm.orders, crm.products).
+# dbt resolves {{ source('crm', 'customers') }} → crm.customers automatically.
+
+sources:
+  - name: crm
+    schema: crm
+    description: CRM data from PostgreSQL, landed as Parquet by dlt (replace disposition).
+    tables:
+      - name: customers
+        description: Full-load customer snapshot from CRM PostgreSQL.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: email
+            tests: [not_null]
+
+      - name: orders
+        description: Full-load orders snapshot from CRM PostgreSQL.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: customer_id
+            tests: [not_null]
+
+      - name: products
+        description: Full-load products snapshot from CRM PostgreSQL.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+models:
+  - name: stg_crm__customers
+    description: Latest CRM customers snapshot (light rename/cast only).
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: email
+        tests: [not_null]
+
+  - name: stg_crm__orders
+    description: Latest CRM orders snapshot (light rename/cast only).
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_crm__customers')
+                field: customer_id
+
+  - name: stg_crm__products
+    description: Latest CRM products snapshot (light rename/cast only).
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+
+  - name: int_crm__customers
+    description: >
+      Customers enriched with order count and total spend from CRM orders.
+      Written to silver as Parquet (dev: local/silver/crm/int_customers / prod: az://silver/crm/int_customers).
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
