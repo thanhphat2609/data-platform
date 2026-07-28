@@ -1,7 +1,11 @@
 {{ config(
     materialized = 'external',
     location     = dest_location('crm', 'int_customers'),
-    format       = 'parquet'
+    format       = 'parquet',
+    options={
+            "partition_by": "ingestion_date",
+            "overwrite": True
+        }
 ) }}
 
 with customers as (

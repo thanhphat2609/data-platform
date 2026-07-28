@@ -1,7 +1,11 @@
 {{ config(
     materialized = 'external',
     location     = dest_location('events', 'int_earthquakes'),
-    format       = 'parquet'
+    format       = 'parquet',
+    options={
+            "partition_by": "ingestion_date",
+            "overwrite": True
+    }
 ) }}
 
 with earthquakes as (

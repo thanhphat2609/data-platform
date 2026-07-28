@@ -1,7 +1,11 @@
 {{ config(
     materialized = 'external',
     location     = dest_location('manage', 'int_tasks'),
-    format       = 'parquet'
+    format       = 'parquet',
+    options={
+            "partition_by": "ingestion_date",
+            "overwrite": True
+    }
 ) }}
 
 with tasks as (

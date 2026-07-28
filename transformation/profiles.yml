@@ -30,6 +30,14 @@ transform:
       type: duckdb
       path: "warehouse/dev.duckdb"
       threads: 4
+      plugins:
+        - module: plugins.ensure_dirs
+          config:
+            dirs:
+              - local/silver/crm
+              - local/silver/ecommerce
+              - local/silver/events
+              - local/silver/manage
 
     # ── Production (Azure Blob) ──────────────────────────────────────────────
     # Sources read from Azure Blob — VIEWs created by init_bronze_views().

@@ -1,7 +1,11 @@
 {{ config(
     materialized = 'external',
     location     = dest_location('ecommerce', 'int_orders'),
-    format       = 'parquet'
+    format       = 'parquet',
+    options={
+            "partition_by": "ingestion_date",
+            "overwrite": True
+    }
 ) }}
 
 with orders as (
