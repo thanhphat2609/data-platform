@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'external',
-    location     = 'local/silver/ecommerce/orders',
+    location     = dest_location('ecommerce', 'int_orders'),
     format       = 'parquet'
 ) }}
 

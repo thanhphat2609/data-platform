@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'external',
-    location     = 'local/silver/events/earthquakes',
+    location     = dest_location('events', 'int_earthquakes'),
     format       = 'parquet'
 ) }}
 

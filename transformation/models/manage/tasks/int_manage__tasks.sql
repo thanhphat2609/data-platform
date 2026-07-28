@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'external',
-    location     = 'local/silver/manage/tasks',
+    location     = dest_location('manage', 'int_tasks'),
     format       = 'parquet'
 ) }}
 

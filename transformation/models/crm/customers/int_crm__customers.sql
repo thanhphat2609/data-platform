@@ -1,6 +1,6 @@
 {{ config(
     materialized = 'external',
-    location     = 'local/silver/crm/customers',
+    location     = dest_location('crm', 'int_customers'),
     format       = 'parquet'
 ) }}
 
