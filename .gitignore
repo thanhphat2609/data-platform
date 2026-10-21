@@ -1,9 +1,11 @@
-# Environment
+# Environment — ignore every .env variant except committed templates
 .env
-.env.local
+.env.*
+!.env.example
+!*.demo
 
 # dlt secrets
-dlt/.dlt/secrets.toml
+**/.dlt/secrets.toml
 
 # Python
 __pycache__/
@@ -19,7 +21,7 @@ venv/
 env/
 
 # dlt pipeline state (local runs)
-dlt/.dlt/pipelines/
+**/.dlt/pipelines/
 
 # Spark
 sdp/__pycache__/
